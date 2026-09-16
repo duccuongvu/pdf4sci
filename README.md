@@ -49,6 +49,37 @@ pdf4sci-gui [paper.pdf]
 A PySide6/Qt app with the same sidebar + PDF-viewer workflow as the web
 UI; compression runs on a background thread so the window never freezes.
 
+## Linux release packages (.AppImage / .deb)
+
+Pre-built, self-contained releases of the native GUI — no Python, Qt, or
+conda needed on the target machine.
+
+```bash
+# AppImage (portable, no install)
+chmod +x pdf4sci-x86_64.AppImage
+./pdf4sci-x86_64.AppImage
+# if your system has no libfuse2: ./pdf4sci-x86_64.AppImage --appimage-extract-and-run
+
+# Debian/Ubuntu package
+sudo apt install ./pdf4sci_0.1.0_amd64.deb
+pdf4sci-gui
+```
+
+Building them yourself (needs the `gui` extra + `pyinstaller` in the dev
+env):
+
+```bash
+pip install -e ".[gui]" pyinstaller
+./scripts/build_release.sh
+# -> dist/release/pdf4sci-x86_64.AppImage, pdf4sci_0.1.0_amd64.deb, SHA256SUMS
+```
+
+`build_bundle.sh` / `build_appimage.sh` / `build_deb.sh` also run
+individually. **Known gap:** built and smoke-tested in this dev
+environment (bundle launches correctly with conda stripped from `PATH`),
+but not verified on an actual clean Ubuntu machine (no VM/Docker
+available here) — do a real install test before distributing.
+
 ## Architecture
 
 ```text
@@ -61,6 +92,10 @@ pdf4sci/
     assets/      — bundled app icons
 
 tests/          — pytest, ~40 tests across engine, web, and GUI
+
+packaging/      — PyInstaller spec, AppImage AppDir, .deb tree
+scripts/        — build_bundle.sh, build_appimage.sh, build_deb.sh,
+                  build_release.sh
 ```
 
 Every front end calls the same `analyzer` / `optimizer` / `quality` /
@@ -77,7 +112,8 @@ pytest
 - CMYK images and color-key/stencil `/Mask` transparency are left
   untouched rather than risk a color/transparency error.
 - Re-encoding drops embedded ICC profiles.
-- `.deb`/AppImage packaging isn't built yet.
+- `.deb`/AppImage packages aren't yet verified on a genuinely clean
+  machine (see the packaging section above).
 
 ---
 
