@@ -44,9 +44,17 @@ implemented:
   doesn't trigger maximum-aggressiveness compression. `--preset
   {maximum-quality,scientific,balanced,aggressive}` selects a starting
   point on that same ladder; `scientific` is the default.
+- **Phase 4 — validation & benchmarking**: every compress run now reopens
+  the output and checks page count/dimensions, text extraction, link
+  counts, image counts, transparency, and vector-content preservation
+  (each pass/fail), reported right after the size summary — pass
+  `--no-validate` to skip it, or `--diagnostics` to also render each page
+  and report PSNR/SSIM (informational only; this tool does not optimize
+  for them). `pdfshrink benchmark paper.pdf` runs all four presets and
+  prints a size/reduction table without permanently writing the
+  intermediate PDFs (add `--output-dir` to keep them).
 
-The `benchmark` command and deeper post-compression validation (SSIM/PSNR
-diagnostics) are Phase 4.
+All four phases from the spec are now implemented end to end.
 
 ## Installation (Ubuntu 22.04+)
 
@@ -109,6 +117,16 @@ pdfshrink paper.pdf --target-size 6MB
 # Presets bundle a --max-dpi/--min-jpeg-quality pair. Explicit flags
 # override whatever the preset sets.
 pdfshrink paper.pdf --preset aggressive
+
+# Skip the post-compression validation checks (they run by default), or
+# add slower per-page PSNR/SSIM diagnostics on top of them.
+pdfshrink paper.pdf --no-validate
+pdfshrink paper.pdf --diagnostics
+
+# Compare all four presets' size/reduction without keeping the outputs.
+pdfshrink benchmark paper.pdf
+# ...or keep them:
+pdfshrink benchmark paper.pdf --output-dir ./benchmark-out
 ```
 
 Example output:
@@ -136,6 +154,18 @@ Summary:
   Images flagged for downsampling: 26
 ```
 
+A compress run's output ends with the validation block:
+
+```text
+PDF reopen test: PASS
+Page count/dimensions: PASS
+Text extraction: PASS
+Links/annotations: PASS
+Images present: PASS
+Transparency preserved: PASS
+Vector content untouched: PASS
+```
+
 ## Architecture
 
 ```text
@@ -153,6 +183,8 @@ pdfshrink/
                     screenshot / plot / icon), no ML
     quality.py    — --target-size search: try (DPI, JPEG quality) rungs
                     gentlest-first, stop at the first that fits
+    validation.py — post-compression checks (reopen, text, links, vector
+                    content, transparency) plus optional PSNR/SSIM
     config.py     — compression policy thresholds and presets, kept
                     separate from the PDF-manipulation code
     pdf_utils.py  — stateless helpers: size formatting, colorspace/filter
@@ -164,11 +196,16 @@ tests/
     test_optimizer.py
     test_classifier.py
     test_quality.py
+    test_validation.py
+    test_integration.py — one PDF combining vector graphics, text, a
+                           photo, transparency, a repeated image, a
+                           grayscale image, and a rotated/scaled image
 ```
 
-Phase 4 adds `validation.py` (deeper post-compression checks, e.g.
-SSIM/PSNR diagnostics) and a `benchmark` command, without changing this
-layout.
+The `benchmark` command lives in `cli.py` as a second Typer app; `entry()`
+dispatches to it or to the default compress command based on argv, so
+`pdfshrink paper.pdf` and `pdfshrink benchmark paper.pdf` both work
+without one shadowing the other.
 
 ## Limitations (current phase)
 
@@ -191,5 +228,13 @@ layout.
 - `--target-size` re-runs the full analyzer + optimizer per rung tried, so
   it can take several times as long as a single-preset run on a
   many-image PDF; it always uses the real output file size to decide
-  whether a rung fits, never an estimate.
-- No `benchmark` command or SSIM/PSNR diagnostics yet — Phase 4.
+  whether a rung fits, never an estimate. `benchmark` similarly runs all
+  four presets in full.
+- SSIM here is a lightweight, unwindowed global approximation (mean/
+  variance/covariance over the whole page render), not a proper windowed
+  SSIM -- good enough to flag a page that changed a lot, not precise
+  enough to compare small local differences. It's diagnostic-only either
+  way: nothing in the compression policy reads it.
+- Validation's "vector content untouched" check compares the count of
+  vector drawing paths per page; it would catch a page being rasterized
+  wholesale, but wouldn't catch a single path being subtly altered.

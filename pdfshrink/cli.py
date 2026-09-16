@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 from itertools import groupby
 
@@ -13,8 +14,10 @@ from .config import PRESETS, AnalyzerConfig, DEFAULT_PRESET
 from .optimizer import OptimizationResult, optimize_pdf
 from .pdf_utils import human_size, parse_size
 from .quality import TargetSizeResult, optimize_to_target_size
+from .validation import ValidationReport, validate
 
 app = typer.Typer(add_completion=False, help="Target-size-aware PDF compressor for scientific papers.")
+benchmark_app = typer.Typer(add_completion=False, help="Run several presets and compare sizes.")
 
 
 def _render_report(analysis: PDFAnalysis) -> str:
@@ -131,6 +134,38 @@ def _render_target_size_summary(result: TargetSizeResult) -> str:
     return "\n".join(lines)
 
 
+def _render_validation(report: ValidationReport) -> str:
+    def status(ok: bool) -> str:
+        return "PASS" if ok else "FAIL"
+
+    lines = [
+        "",
+        f"PDF reopen test: {status(report.reopened_ok)}",
+    ]
+    if report.reopened_ok:
+        lines += [
+            f"Page count/dimensions: {status(report.page_count_match and report.page_dims_match)}",
+            f"Text extraction: {status(report.text_match)}",
+            f"Links/annotations: {status(report.links_match)}",
+            f"Images present: {status(report.image_count_match)}",
+            f"Transparency preserved: {status(report.alpha_count_match)}",
+            f"Vector content untouched: {status(report.vector_count_match)}",
+        ]
+    if report.issues:
+        lines.append("")
+        lines.append("Validation issues:")
+        for issue in report.issues:
+            lines.append(f"  - {issue}")
+    if report.diagnostics:
+        lines.append("")
+        lines.append("Diagnostics (informational only, not optimized for):")
+        for d in report.diagnostics:
+            psnr_s = f"{d.psnr:.1f} dB" if d.psnr is not None else "n/a"
+            ssim_s = f"{d.ssim:.3f}" if d.ssim is not None else "n/a"
+            lines.append(f"  page {d.page}: PSNR={psnr_s}  SSIM={ssim_s}")
+    return "\n".join(lines)
+
+
 @app.command()
 def main(
     input_pdf: str = typer.Argument(..., help="Path to the input PDF."),
@@ -149,6 +184,12 @@ def main(
     ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Allow -o to point at the input file."),
     verbose: bool = typer.Option(False, "--verbose", help="Show detailed per-image decisions."),
+    validate_output: bool = typer.Option(
+        True, "--validate/--no-validate", help="Verify the output PDF (reopen, text, links, vectors, transparency)."
+    ),
+    diagnostics: bool = typer.Option(
+        False, "--diagnostics", help="Also compute per-page PSNR/SSIM (slower; informational only)."
+    ),
 ) -> None:
     if preset not in PRESETS:
         typer.echo(f"Unknown preset {preset!r}. Choose from: {', '.join(PRESETS)}.", err=True)
@@ -185,6 +226,9 @@ def main(
                 typer.echo(_render_verbose_log(result.results))
                 typer.echo("")
             typer.echo(_render_target_size_summary(result))
+            if not dry_run and validate_output:
+                report = validate(input_pdf, output_path, with_diagnostics=diagnostics)
+                typer.echo(_render_validation(report))
         if not dry_run:
             typer.echo(f"\nWrote {output_path}")
         raise typer.Exit(code=0)
@@ -210,8 +254,56 @@ def main(
         typer.echo(_render_verbose_log(results))
         typer.echo("")
     typer.echo(_render_summary(results, analysis.file_size, after_size))
+    if validate_output:
+        report = validate(input_pdf, output_path, with_diagnostics=diagnostics)
+        typer.echo(_render_validation(report))
     typer.echo(f"\nWrote {output_path}")
 
 
+@benchmark_app.command()
+def benchmark(
+    input_pdf: str = typer.Argument(..., help="Path to the input PDF."),
+    output_dir: str = typer.Option(
+        None, "--output-dir", help="Persist each preset's compressed PDF here. Default: discard after measuring."
+    ),
+) -> None:
+    """Run every preset and report size/reduction, without necessarily
+    keeping the intermediate PDFs."""
+    original_size = os.path.getsize(input_pdf)
+    rows = [("Original", original_size, None)]
+
+    for name, preset_cfg in PRESETS.items():
+        cfg = AnalyzerConfig(max_dpi=preset_cfg.max_dpi)
+        with tempfile.TemporaryDirectory() as tmp:
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+                stem = os.path.splitext(os.path.basename(input_pdf))[0]
+                out_path = os.path.join(output_dir, f"{stem}_{name}.pdf")
+            else:
+                out_path = os.path.join(tmp, f"{name}.pdf")
+            optimize_pdf(input_pdf, out_path, cfg, jpeg_quality=preset_cfg.jpeg_quality)
+            size = os.path.getsize(out_path)
+        reduction = (1 - size / original_size) * 100 if original_size else 0
+        rows.append((name, size, reduction))
+
+    header = f"{'Configuration':<20}{'Size':>12}{'Reduction':>12}"
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for name, size, reduction in rows:
+        red_str = "-" if reduction is None else f"{reduction:.0f}%"
+        typer.echo(f"{name:<20}{human_size(size):>12}{red_str:>12}")
+
+
+def entry() -> None:
+    """Dispatches to the `benchmark` subcommand or the default compress
+    command, so `pdfshrink paper.pdf` works without naming a subcommand
+    while `pdfshrink benchmark paper.pdf` still does."""
+    if len(sys.argv) > 1 and sys.argv[1] == "benchmark":
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
+        benchmark_app()
+    else:
+        app()
+
+
 if __name__ == "__main__":
-    app()
+    entry()
