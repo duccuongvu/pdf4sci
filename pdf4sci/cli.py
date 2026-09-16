@@ -296,8 +296,8 @@ def benchmark(
 
 def entry() -> None:
     """Dispatches to the `benchmark` subcommand or the default compress
-    command, so `pdfshrink paper.pdf` works without naming a subcommand
-    while `pdfshrink benchmark paper.pdf` still does."""
+    command, so `pdf4sci paper.pdf` works without naming a subcommand
+    while `pdf4sci benchmark paper.pdf` still does."""
     if len(sys.argv) > 1 and sys.argv[1] == "benchmark":
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         benchmark_app()

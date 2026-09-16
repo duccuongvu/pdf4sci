@@ -5,9 +5,9 @@ rotated/scaled image."""
 
 import pymupdf
 
-from pdfshrink.config import AnalyzerConfig
-from pdfshrink.optimizer import optimize_pdf
-from pdfshrink.validation import validate
+from pdf4sci.config import AnalyzerConfig
+from pdf4sci.optimizer import optimize_pdf
+from pdf4sci.validation import validate
 
 
 def _build_kitchen_sink_pdf(make_pdf, png_bytes):

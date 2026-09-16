@@ -1,8 +1,8 @@
 import pymupdf
 
-from pdfshrink.config import AnalyzerConfig
-from pdfshrink.optimizer import optimize_pdf
-from pdfshrink.validation import validate
+from pdf4sci.config import AnalyzerConfig
+from pdf4sci.optimizer import optimize_pdf
+from pdf4sci.validation import validate
 
 
 def test_valid_compression_passes_all_checks(make_pdf, png_bytes, tmp_path):

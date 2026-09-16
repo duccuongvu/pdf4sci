@@ -15,7 +15,7 @@ The project must use a dedicated Conda environment so that all Python dependenci
 Use the environment name:
 
 ```bash
-pdfshrink
+pdf4sci
 
 ## 1. Core philosophy
 
@@ -154,7 +154,7 @@ This is one of the most important features.
 CLI example:
 
 ```bash
-pdfshrink paper.pdf -o paper_compressed.pdf --target-size 6MB
+pdf4sci paper.pdf -o paper_compressed.pdf --target-size 6MB
 ```
 
 The optimizer should attempt to produce the highest-quality PDF that fits within the requested size.
@@ -221,8 +221,8 @@ Scientific should prioritize preservation of vector content and readable figures
 Support:
 
 ```bash
-pdfshrink paper.pdf --analyze
-pdfshrink paper.pdf --dry-run --target-size 6MB
+pdf4sci paper.pdf --analyze
+pdf4sci paper.pdf --dry-run --target-size 6MB
 ```
 
 Dry-run should explain exactly what would be modified without writing the final PDF.
@@ -324,21 +324,21 @@ Use argparse, Typer, or Click.
 Desired commands:
 
 ```bash
-pdfshrink paper.pdf
+pdf4sci paper.pdf
 
-pdfshrink paper.pdf --analyze
+pdf4sci paper.pdf --analyze
 
-pdfshrink paper.pdf --target-size 6MB
+pdf4sci paper.pdf --target-size 6MB
 
-pdfshrink paper.pdf --preset scientific
+pdf4sci paper.pdf --preset scientific
 
-pdfshrink paper.pdf --max-dpi 300
+pdf4sci paper.pdf --max-dpi 300
 
-pdfshrink paper.pdf --min-jpeg-quality 88
+pdf4sci paper.pdf --min-jpeg-quality 88
 
-pdfshrink paper.pdf --dry-run
+pdf4sci paper.pdf --dry-run
 
-pdfshrink paper.pdf --verbose
+pdf4sci paper.pdf --verbose
 ```
 
 Provide a useful `--help`.
@@ -367,7 +367,7 @@ Do not write everything in one giant Python file.
 Use a maintainable structure, for example:
 
 ```text
-pdfshrink/
+pdf4sci/
     __init__.py
     cli.py
     analyzer.py
@@ -413,7 +413,7 @@ Verify that compression does not accidentally rasterize or destroy unrelated PDF
 Add something like:
 
 ```bash
-pdfshrink benchmark paper.pdf
+pdf4sci benchmark paper.pdf
 ```
 
 It should run several reasonable compression configurations and report:

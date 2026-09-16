@@ -1,8 +1,8 @@
 import pymupdf
 
-from pdfshrink.analyzer import analyze_pdf
-from pdfshrink.config import AnalyzerConfig
-from pdfshrink.optimizer import optimize_pdf
+from pdf4sci.analyzer import analyze_pdf
+from pdf4sci.config import AnalyzerConfig
+from pdf4sci.optimizer import optimize_pdf
 
 
 def test_high_dpi_image_is_downsampled_and_shrinks(make_pdf, png_bytes, tmp_path):

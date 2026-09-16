@@ -2,7 +2,7 @@ import os
 
 import pymupdf
 
-from pdfshrink.quality import optimize_to_target_size
+from pdf4sci.quality import optimize_to_target_size
 
 
 def _build_multi_image_pdf(make_pdf, png_bytes):
@@ -53,7 +53,7 @@ def test_unreachable_target_warns_instead_of_failing(make_pdf, png_bytes, tmp_pa
 
 
 def test_ladder_never_exceeds_min_jpeg_quality_floor():
-    from pdfshrink.quality import _ladder
+    from pdf4sci.quality import _ladder
 
     steps = _ladder(min_jpeg_quality=88)
     assert all(q >= 88 for _, q in steps)

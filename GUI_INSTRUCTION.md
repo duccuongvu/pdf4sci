@@ -1,1126 +1,1147 @@
-# PDFShrink Native Ubuntu GUI — Implementation Instructions
+# pdf4sci Native GUI & Linux Packaging
 
-## Objective
+The pdf4sci compression backend, CLI, and web application are already functional and should be treated as stable.
 
-The PDFShrink compression backend and web application are already implemented and working.
+The current web application has reached a satisfactory workflow and should be used as the **behavioral and visual reference** for the native application.
 
-Your task is **NOT to redesign or rewrite the PDF compression backend or the existing web application**.
+The goal of this task is to build a polished native Linux desktop application and produce distributable:
 
-Your task is to build a polished **native desktop GUI for Ubuntu/Linux** on top of the existing PDFShrink core, and then package it so an end user can install or run it **without Conda, Python, pip, or a terminal-based development setup**.
+* `.AppImage`
+* `.deb`
 
-The final user experience should be:
+packages.
 
-1. Install PDFShrink from a `.deb`, or run a portable AppImage.
-2. Open PDFShrink from the Ubuntu application launcher.
-3. Drag and drop a PDF.
-4. Select a target size or compression preset.
-5. Click **Compress**.
-6. See real progress without the UI freezing.
-7. Review the compression result and validation status.
-8. Open the compressed PDF or its containing folder.
-9. Optionally inspect original/compressed previews.
+The final application must run on a normal Ubuntu machine **without requiring Conda, a manually installed Python environment, or running the web server manually**.
 
-The existing backend remains the source of truth for all PDF processing.
+Do not redesign or rewrite the compression engine during this task.
 
 ---
 
-# 1. First: Inspect the Existing Project
+# 1. Primary Goal
 
-Before writing GUI code:
+Turn the existing pdf4sci project into an installable Linux desktop application.
 
-1. Inspect the entire existing repository.
-2. Identify:
-   - compression core
-   - PDF analyzer
-   - optimizer
-   - validator
-   - configuration and presets
-   - CLI
-   - web application
-   - data models
-   - progress/reporting mechanisms
-   - temporary-file handling
-   - external native binaries, if any
-3. Run all existing tests.
-4. Run the existing CLI and/or web application where useful.
-5. Understand the public API that should be reused by the GUI.
-6. Identify every runtime dependency required by the compression backend.
+The expected user experience is:
 
-Do not duplicate existing functionality.
+```text
+Install / launch pdf4sci
+        ↓
+Open or drop PDF
+        ↓
+Preview PDF
+        ↓
+Configure compression
+        ↓
+Compress
+        ↓
+Preview compressed PDF
+        ↓
+Compare Original / Compressed
+        ↓
+Download / Save result
+```
 
-Do not change working backend behavior merely to make GUI implementation easier.
-
-If a small backend refactor is genuinely necessary to expose a clean reusable API, keep it minimal, test it, and preserve backward compatibility with both the CLI and web application.
+The native GUI should preserve the workflow and visual hierarchy already established in the current web application.
 
 ---
 
-# 2. Development Environment
+# 2. First: Inspect the Existing Project
 
-Use the existing project Conda environment if one already exists.
+Before writing GUI or packaging code, inspect the repository.
 
-For example:
+Determine:
 
-```bash
-conda activate pdfshrink
-```
+* project structure
+* Python version
+* compression-core entry points
+* CLI entry point
+* current web application architecture
+* existing tests
+* dependency files
+* native external tools used
+* optional external tools
+* how compression progress is exposed
+* how PDF analysis is exposed
+* how temporary files are managed
+* how compressed output is generated
+* current preset definitions
+* current advanced settings
 
-Do not create a second unnecessary environment.
+Do not guess these APIs.
 
-Install GUI development dependencies inside the existing Conda environment.
+Reuse the existing implementation.
 
-Prefer:
+Run the current test suite before modifying anything.
 
-```bash
-python -m pip install PySide6
-```
-
-or Conda/conda-forge if more appropriate for the existing repository.
-
-Do not install Python packages globally.
-
-Do not modify the system Python.
-
-Before development, verify:
-
-```bash
-which python
-python --version
-```
-
-Keep development dependencies and runtime dependencies clearly separated where practical.
-
-The Conda environment is for **development only**. The final application must not require Conda.
+Record the baseline result.
 
 ---
 
-# 3. GUI Framework
+# 3. Freeze the Compression Core
 
-Use:
-
-**PySide6 / Qt 6**
-
-This must be a real native desktop application.
+Treat the existing compression engine as stable.
 
 Do NOT:
 
-- implement another browser UI
-- wrap the existing web app in a WebView
-- use Electron
-- launch a local web server just to display the desktop GUI
+* redesign compression algorithms
+* change target-size behavior
+* change DPI logic
+* change JPEG quality logic
+* introduce vector compression
+* change presets unless required to fix an actual bug
+* duplicate compression logic inside the GUI
+* break CLI behavior
 
-During development, the application should be runnable with something similar to:
+The GUI must call the same compression core used by the CLI/web application.
 
-```bash
-pdfshrink-gui
+Architecture should remain conceptually:
+
+```text
+                 ┌───────────────┐
+                 │ pdf4sci Core│
+                 └───────┬───────┘
+                         │
+            ┌────────────┼────────────┐
+            │            │            │
+           CLI         Web UI      Native GUI
 ```
 
-or:
-
-```bash
-python -m pdfshrink.gui
-```
-
-Later it must be launchable directly from Ubuntu's application menu.
+There must be only one source of truth for compression behavior.
 
 ---
 
-# 4. Architecture
+# 4. Native GUI Technology
 
-Keep the GUI separate from the core.
+Use:
 
-A reasonable structure is:
+> **PySide6 / Qt 6**
 
-```text
-pdfshrink/
-├── core/
-│   ├── ...
-│   └── existing backend
-│
-├── cli/
-│   └── existing CLI
-│
-├── web/
-│   └── existing web application
-│
-└── gui/
-    ├── __init__.py
-    ├── app.py
-    ├── main_window.py
-    │
-    ├── widgets/
-    │   ├── drop_zone.py
-    │   ├── settings_panel.py
-    │   ├── analysis_panel.py
-    │   ├── progress_panel.py
-    │   ├── result_panel.py
-    │   └── pdf_preview.py
-    │
-    ├── workers/
-    │   ├── analyze_worker.py
-    │   └── compress_worker.py
-    │
-    └── resources/
-        ├── icons/
-        └── style.qss
+Do not use:
 
-packaging/
-├── pyinstaller/
-├── appimage/
-└── deb/
-```
+* Electron
+* embedded Chromium merely to display the existing website
+* WebView as the main application
+* another local web server as the native GUI
+* Tkinter
 
-Adapt this structure to the existing repository where appropriate.
+Build a real Qt desktop interface.
 
-The GUI should call the core directly through Python APIs.
-
-Avoid:
-
-```python
-subprocess.run(["pdfshrink", ...])
-```
-
-when the compression engine can be imported directly.
-
-Prefer:
-
-```python
-result = compressor.compress(...)
-```
-
-The CLI, web app, and GUI should all ultimately use the same compression engine.
-
-The GUI must not contain its own PDF compression policy.
+The native application should invoke the Python compression core directly.
 
 ---
 
-# 5. MVP User Interface
+# 5. GUI Layout
 
-The initial screen should be intentionally simple.
+Use the current web application as the primary UX reference.
 
-The primary workflow should require almost no technical knowledge:
-
-> **Drop PDF → choose target size → Compress**
-
-Conceptually:
+The desktop application should use:
 
 ```text
-┌──────────────────────────────────────────────────────┐
-│ PDFShrink                                       ─ □ ×│
-│ Scientific PDF Optimizer                            │
-├──────────────────────────────────────────────────────┤
-│                                                      │
-│    ┌────────────────────────────────────────────┐    │
-│    │                                            │    │
-│    │              Drop PDF here                 │    │
-│    │                                            │    │
-│    │           or click to browse               │    │
-│    │                                            │    │
-│    └────────────────────────────────────────────┘    │
-│                                                      │
-│ paper.pdf                               12.43 MB     │
-│                                                      │
-│ Target size       [ 6.0 ] MB                         │
-│ Preset            [ Scientific ▼ ]                   │
-│                                                      │
-│ Advanced ▸                                           │
-│                                                      │
-│                    [ Compress ]                      │
-│                                                      │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────┬───────────────────────────────────────────┐
+│                          │                                           │
+│ pdf4sci                │                                           │
+│                          │                                           │
+│ File information         │                                           │
+│                          │                                           │
+│ Compression settings     │                                           │
+│                          │                PDF VIEWER                 │
+│ Advanced settings        │                                           │
+│                          │                                           │
+│ Compress                 │                                           │
+│                          │                                           │
+│ Progress                 │                                           │
+│ Results                  │                                           │
+│                          │                                           │
+│ Save / Export            │                                           │
+│                          │                                           │
+└──────────────────────────┴───────────────────────────────────────────┘
 ```
 
-Do not expose DPI, JPEG quality, PDF object IDs, or other technical concepts on the main screen.
+Use:
+
+* left sidebar for information and controls
+* large PDF viewer on the right
+
+Suggested sidebar width:
+
+```text
+300–380 px
+```
+
+The PDF viewer should receive most of the available window.
+
+Do not turn the GUI into a dashboard.
 
 ---
 
-# 6. Drag and Drop
-
-Implement a proper PDF drag-and-drop zone.
-
-Requirements:
-
-- accept `.pdf`
-- reject unsupported files cleanly
-- visually react when a valid PDF is dragged over the window
-- allow clicking the drop zone to open a file picker
-- display:
-  - filename
-  - original file size
-  - page count if quickly available
-- allow dropping a new PDF after a previous job has completed
-
-Also support:
-
-```bash
-pdfshrink-gui paper.pdf
-```
-
-so the application can later integrate naturally with Ubuntu's **Open With** menu.
-
----
-
-# 7. Compression Settings
-
-Expose existing backend presets.
-
-At minimum, if already supported by the backend:
-
-```text
-Scientific
-Maximum Quality
-Balanced
-Aggressive
-```
-
-Default:
-
-```text
-Scientific
-```
-
-Target size should be prominent:
-
-```text
-Target size: [ 6.0 ] MB
-```
-
-Use an appropriate numeric Qt control such as `QDoubleSpinBox`.
-
-Reject invalid values.
-
-If the requested target is equal to or larger than the input file size, communicate this clearly rather than performing unnecessary destructive compression.
-
----
-
-# 8. Advanced Settings
-
-Hide technical controls behind:
-
-```text
-Advanced ▸
-```
-
-Potential controls should map directly to existing backend options, for example:
-
-```text
-Maximum image DPI       [300]
-Minimum JPEG quality    [88]
-Line-art DPI            [450]
-Preserve transparency   [✓]
-Prefer lossless plots   [✓]
-```
-
-Do not invent settings unsupported by the backend.
-
-Do not reproduce backend compression logic in GUI code.
-
-The GUI collects parameters; the backend makes compression decisions.
-
----
-
-# 9. Analysis
-
-If the existing backend provides PDF analysis, expose it visually.
-
-Show a concise summary:
-
-```text
-17 raster images
-3 oversized
-14 already optimized
-```
-
-Optionally provide an expandable table:
-
-```text
-Page   Resolution     DPI     Size      Type       Action
-2      5120×2880      1340    3.1 MB    Render     Optimize
-3      1200×900       286     240 KB    Plot       Keep
-6      4000×3000      920     2.4 MB    Photo      Optimize
-```
-
-Analysis is secondary to the primary compression workflow.
-
-Do not make users inspect the analysis before they can compress a PDF.
-
----
-
-# 10. Background Processing
-
-This is mandatory.
-
-PDF analysis and compression must **NOT run on the Qt main thread**.
-
-The GUI must remain responsive.
-
-Use an appropriate Qt architecture such as:
-
-```text
-GUI thread
-    │
-    │ Qt signals
-    ▼
-QThread / QThreadPool worker
-    │
-    ▼
-PDFShrink core
-```
-
-Never update GUI widgets directly from a worker thread.
-
-Use Qt signals/slots for:
-
-- progress
-- status text
-- success
-- failure
-- cancellation state
-
----
-
-# 11. Progress Reporting
-
-Connect existing backend progress events/callbacks to the GUI where available.
-
-Display meaningful information, for example:
-
-```text
-Optimizing paper.pdf
-
-████████████████░░░░░░░░░░  63%
-
-Optimizing image 7 / 11
-Page 4
-4200 × 2800
-300 DPI · JPEG Q92
-
-Current estimated size: 7.1 MB
-```
-
-If the backend cannot provide an accurate percentage, use an indeterminate progress indicator.
-
-Never invent fake progress percentages.
-
----
-
-# 12. Cancellation
-
-Provide a **Cancel** action during long operations if the backend can safely support cancellation.
-
-Cancellation must not:
-
-- modify the original PDF
-- leave a corrupt partial output presented as valid
-- crash the application
-- leave unnecessary temporary files
-
-If safe cancellation is not currently supported by the backend, document that limitation rather than implementing unsafe termination.
-
----
-
-# 13. Result Screen
-
-After successful compression, prominently display:
-
-```text
-12.43 MB  →  5.87 MB
-
-Reduction: 52.8%
-```
-
-Also display validation information returned by the backend, for example:
-
-```text
-✓ PDF valid
-✓ 8 / 8 pages
-✓ Text preserved
-✓ Vector content preserved
-
-3 images optimized
-14 images unchanged
-```
-
-Provide actions:
-
-```text
-Open PDF
-Open Folder
-Compress Another
-```
-
-Later, if preview functionality is implemented:
-
-```text
-Compare
-```
-
----
-
-# 14. Output Handling
-
-Never overwrite the original PDF by default.
-
-Use a sensible default:
-
-```text
-paper.pdf
-    ↓
-paper_compressed.pdf
-```
-
-Allow the user to choose another destination.
-
-Handle filename collisions safely.
-
-Do not silently overwrite an existing output.
-
-Temporary files should use a safe temporary directory and be cleaned after completion or failure.
-
----
-
-# 15. PDF Preview
-
-Implement preview only after the basic GUI workflow is stable.
-
-Use MuPDF/PyMuPDF or another renderer already available in the repository.
-
-Rendering pages for GUI preview is allowed and does not imply rasterizing the actual output PDF.
+# 6. File Loading
 
 Support:
 
-- page navigation
-- zoom
-- fit page
-- fit width
+* Open PDF button
+* drag-and-drop PDF
+* optionally opening a PDF passed as a command-line argument
 
-Thumbnail navigation is desirable but not required for the first release.
+Example:
 
-Avoid rendering every page at high resolution at startup.
+```bash
+pdf4sci paper.pdf
+```
 
-Render lazily and cache previews sensibly.
+If practical, support Linux file-manager integration later through the `.desktop` file.
+
+After loading a PDF:
+
+* validate it
+* show filename
+* show original file size
+* show page count
+* run existing analysis where appropriate
+* immediately display it in the PDF viewer
+
+Do not require a separate Preview button.
 
 ---
 
-# 16. Before/After Comparison
+# 7. Compression Controls
 
-After compression, provide a useful visual comparison.
+Expose the same important controls as the current web application.
 
 At minimum:
 
 ```text
-Original | Compressed
+Target size
+[ 6.0 ] MB
+
+Preset
+[ Scientific ▼ ]
+
+Advanced ▸
+
+[ Compress ]
 ```
 
-Maintain synchronized page and zoom state where practical.
-
-A later version may provide:
+Advanced settings should expose existing backend options, including where applicable:
 
 ```text
-┌──────────────────┬──────────────────┐
-│ Original         │ Compressed       │
-│                  │                  │
-│    PDF page      │    PDF page      │
-│                  │                  │
-└──────────────────┴──────────────────┘
-
-Zoom: 100%  200%  400%
-Synchronize zoom: ✓
+Maximum image DPI
+Minimum JPEG quality
 ```
 
-This feature is especially useful for scientific papers because users care about whether plots, diagrams, equations, and figures remain sharp.
+Do not invent GUI-only compression parameters.
 
-Do not block the MVP release on before/after comparison.
+GUI values must map directly to existing backend configuration.
+
+Use the same default values and preset definitions as the existing application.
 
 ---
 
-# 17. Error Handling
+# 8. PDF Viewer
 
-Present errors cleanly.
+Implement an integrated native PDF viewer.
 
-Examples:
+Prefer Qt's supported PDF functionality where suitable, such as Qt PDF / `QPdfDocument`, rather than introducing an entire browser engine.
 
-- invalid PDF
-- encrypted PDF
-- unsupported PDF feature
-- permission denied
-- disk full
-- output path unavailable
-- backend compression failure
-- validation failure
+Requirements:
 
-Do not show a raw Python traceback to normal users.
+* render PDF pages
+* previous/next page
+* current page / total pages
+* zoom in/out
+* fit width
+* fit page
+* scrolling
+* mouse wheel
+* trackpad
+* high zoom suitable for scientific figures
 
-Example:
+Target useful zoom range should include approximately:
 
 ```text
-Could not compress this PDF.
-
-The document contains an image format that PDFShrink
-cannot safely optimize.
-
-The original PDF was not modified.
-
-[Show Details] [Close]
+100%
+125%
+150%
+200%
+300%
+400%
 ```
 
-`Show Details` may expose technical diagnostics.
+The user must be able to inspect:
 
-Log full exceptions for development/debugging.
+* equations
+* plot lines
+* labels
+* diagrams
+* raster images
+* scientific figures
+
+Rendering must not modify the actual PDF.
 
 ---
 
-# 18. UI/UX Direction
+# 9. Original / Compressed Preview
 
-The application should feel like a focused Ubuntu utility, not an enterprise dashboard.
+Use one main PDF viewer.
 
-Design goals:
+Before compression:
 
-- minimal
-- clean
-- modern
-- spacious
-- responsive
-- obvious primary action
-- minimal visual clutter
+```text
+viewer = original PDF
+```
 
-Avoid:
+After compression:
 
-- excessive cards
-- gradients everywhere
-- dashboard-style layouts
-- unnecessary animation
-- excessive icons
-- technical PDF terminology on the main screen
+```text
+viewer = compressed PDF
+```
 
-Use Qt's native capabilities where practical.
+Then expose:
 
-Support light and dark desktop environments if reasonably possible.
+```text
+Preview
 
-Functionality and clarity are more important than creating a custom design system.
+[ Original | Compressed ]
+```
+
+Default to `Compressed` after successful compression.
+
+When switching between Original and Compressed, preserve whenever possible:
+
+* page number
+* zoom
+* scroll position
+
+This should allow rapid visual comparison.
+
+Do not build two simultaneous viewers unless there is a compelling technical reason.
 
 ---
 
-# 19. Keyboard and Desktop Behavior
+# 10. Compression Must Run in Background
 
-Support basic desktop conventions.
+This is mandatory.
 
-Suggested shortcuts:
+Compression must never block the Qt UI thread.
+
+Use an appropriate Qt worker architecture such as:
+
+* `QThread`
+* worker `QObject`
+* Qt signals/slots
+
+The UI must remain responsive while compression runs.
+
+The user should still be able to:
+
+* move the window
+* inspect the current PDF
+* scroll the PDF
+* see progress
+* cancel where backend cancellation safely supports it
+
+Never call the full compression process synchronously from the GUI thread.
+
+---
+
+# 11. Progress
+
+Use real backend progress if available.
+
+Display information such as:
 
 ```text
-Ctrl+O       Open PDF
-Ctrl+Enter   Compress
-Ctrl+Q       Quit
+Compressing...
+
+████████████████░░░░ 72%
+
+Optimizing images...
 ```
 
-Optional:
+If exact progress cannot be determined, use an indeterminate progress indicator.
+
+Do not fake percentages.
+
+Worker → GUI communication must be thread-safe using Qt signals.
+
+---
+
+# 12. Compression Result
+
+After successful compression show compact information in the sidebar:
 
 ```text
-Ctrl+,       Settings
+Complete
+
+12.43 MB
+    ↓
+5.87 MB
+
+52.8% smaller
+
+✓ PDF valid
+✓ 8 pages
 ```
 
-Support opening a PDF directly:
+If available, also show compact analysis such as:
+
+```text
+3 images optimized
+14 images unchanged
+```
+
+Do not create a separate result window.
+
+Keep the PDF viewer visible.
+
+Automatically switch the viewer to the compressed PDF.
+
+---
+
+# 13. Saving Output
+
+Provide a clear action:
+
+```text
+Save compressed PDF
+```
+
+Use a native Qt save-file dialog.
+
+Suggest an output filename such as:
+
+```text
+paper_compressed.pdf
+```
+
+Never overwrite the original PDF without explicit confirmation.
+
+Prefer preventing accidental overwrite entirely.
+
+The user should always retain the source PDF.
+
+---
+
+# 14. Temporary Files
+
+Manage temporary output carefully.
+
+During compression:
+
+* use an application-specific temporary directory
+* do not overwrite input
+* clean temporary files after they are no longer needed
+* preserve compressed result until the user saves it or closes/replaces the job
+
+On application exit, clean stale temporary resources where safe.
+
+Do not delete user-created output files.
+
+---
+
+# 15. Loading Another PDF
+
+When another PDF is opened:
+
+* cancel/finish current safe operations as appropriate
+* dispose current viewer document
+* clear previous compressed output
+* clear previous analysis
+* clear previous result
+* reset Original/Compressed preview
+* load the new document
+
+Never display results belonging to the previous PDF.
+
+---
+
+# 16. Error Handling
+
+Handle at least:
+
+* invalid PDF
+* encrypted/password-protected PDF
+* corrupted PDF
+* unreadable file
+* unsupported PDF feature
+* compression failure
+* insufficient disk space
+* missing optional dependency
+* backend exception
+* output write failure
+
+Show concise user-facing errors.
+
+Do not dump Python tracebacks into the normal GUI.
+
+Detailed diagnostics may be written to logs.
+
+---
+
+# 17. Logging
+
+Add appropriate application logging if not already available.
+
+Prefer a location consistent with Linux desktop applications.
+
+Logs should help diagnose:
+
+* startup failures
+* dependency failures
+* compression exceptions
+* PDF rendering problems
+* packaging-specific failures
+
+Do not log PDF contents or unnecessary user data.
+
+---
+
+# 18. Development Environment
+
+Development may continue using the existing Conda environment.
+
+Prefer the existing environment:
 
 ```bash
-pdfshrink-gui paper.pdf
+conda activate pdf4sci
 ```
 
-This should later allow:
+Do not install Python packages globally.
 
-```text
-Right click paper.pdf
-    ↓
-Open With
-    ↓
-PDFShrink
+Update the reproducible environment specification if GUI dependencies are added.
+
+For example:
+
+```yaml
+PySide6
 ```
 
----
+or the exact package dependencies actually required.
 
-# 20. Persistent Preferences
-
-Use `QSettings` for lightweight preferences.
-
-Potentially remember:
-
-- last preset
-- last target size
-- last output directory
-- advanced settings
-- window size/state
-
-Do not store document contents.
-
-Do not unnecessarily store recent PDF paths if there is no product need.
+Development environment and release runtime are different concerns.
 
 ---
 
-# 21. Tests
+# 19. Release Requirement
 
-Keep all existing backend, CLI, and web tests passing.
+The final user must NOT need:
 
-Add practical GUI/integration tests for:
+* Conda
+* Miniconda
+* Anaconda
+* Python installed separately
+* pip
+* virtualenv
+* manually running a backend
+* manually installing Python packages
 
-- GUI/backend parameter mapping
-- invalid input
-- output naming
-- settings persistence
-- worker success
-- worker failure
-- worker signals
-- target-size validation
-
-Do not overinvest in pixel-perfect GUI testing.
-
-Core PDF correctness remains the responsibility of the existing backend test suite.
+The release should behave like a normal Linux application.
 
 ---
 
-# 22. Release Goal
+# 20. Audit External Native Dependencies
 
-The final release must work on a normal supported Ubuntu machine **without requiring the user to install**:
+Before packaging, identify every external executable used by pdf4sci.
 
-- Conda
-- Python
-- pip
-- PySide6
-- the project's development environment
+Possible examples may include:
 
-The user should receive either:
+* qpdf
+* Ghostscript
+* oxipng
+* pngquant
+* MozJPEG / cjpeg
+* MuPDF-related utilities
+
+Do not assume all of these are actually required.
+
+Classify each dependency as:
 
 ```text
-PDFShrink-1.0.0-x86_64.AppImage
+Required
+Optional
+Development only
+```
+
+For each required dependency decide whether to:
+
+1. bundle it with the application, or
+2. declare it as a system dependency where appropriate.
+
+The AppImage should be as self-contained as reasonably possible.
+
+The `.deb` package may use appropriate Ubuntu package dependencies where this is cleaner and reliable.
+
+Do not silently rely on executables that happen to exist on the development machine.
+
+---
+
+# 21. Python Application Bundling
+
+Use **PyInstaller** unless repository inspection reveals a strong technical reason to use another approach.
+
+Create a reproducible build configuration.
+
+Prefer a `.spec` file committed to the project.
+
+Ensure PyInstaller includes:
+
+* Python runtime
+* pdf4sci modules
+* PySide6
+* required Qt plugins
+* Qt PDF components
+* icons
+* application resources
+* required Python dependencies
+* required non-Python resources
+
+Check carefully for Qt plugin issues.
+
+Test from the generated bundle, not only from source.
+
+---
+
+# 22. Build Stages
+
+Do not attempt AppImage and `.deb` packaging before the standalone bundled application works.
+
+Use this sequence:
+
+```text
+Source
+   ↓
+PyInstaller bundle
+   ↓
+Test bundle
+   ↓
+AppImage
+   ↓
+Test AppImage
+   ↓
+.deb
+   ↓
+Test .deb
+```
+
+Debug each layer independently.
+
+---
+
+# 23. AppImage
+
+Produce an artifact such as:
+
+```text
+pdf4sci-x86_64.AppImage
+```
+
+The AppImage should:
+
+* launch directly
+* contain the application runtime
+* contain required Qt libraries/plugins
+* contain required application resources
+* not require Conda
+* not require separate Python
+* work from arbitrary user directories
+
+Make it executable:
+
+```bash
+chmod +x pdf4sci-x86_64.AppImage
+```
+
+Then it should launch with:
+
+```bash
+./pdf4sci-x86_64.AppImage
+```
+
+Test the actual generated AppImage.
+
+Do not assume successful packaging means successful execution.
+
+---
+
+# 24. Debian Package
+
+Produce an installable package such as:
+
+```text
+pdf4sci_<version>_amd64.deb
+```
+
+Installation should work using:
+
+```bash
+sudo apt install ./pdf4sci_<version>_amd64.deb
+```
+
+After installation the user should be able to launch:
+
+```bash
+pdf4sci
 ```
 
 or:
 
-```text
-pdfshrink_1.0.0_amd64.deb
-```
-
-and be able to use PDFShrink as a normal desktop application.
-
----
-
-# 23. Packaging Strategy
-
-Do not start packaging until the GUI works reliably from the development environment.
-
-Recommended pipeline:
-
-```text
-Source repository
-      ↓
-PyInstaller
-      ↓
-Standalone Linux application bundle
-      ↓
- ┌───────────────┬───────────────┐
- │               │               │
-AppImage        .deb        development build
-```
-
-Use PyInstaller or another justified Python application bundler to include the Python interpreter and Python runtime dependencies.
-
-The packaged application must not rely on the user's Conda environment.
-
----
-
-# 24. External Native Dependencies
-
-Before packaging, audit the backend for external executables such as:
-
-```text
-qpdf
-Ghostscript
-oxipng
-pngquant
-mozjpeg
-```
-
-For every external binary, explicitly decide whether to:
-
-1. bundle a compatible binary with PDFShrink, or
-2. declare it as a package dependency, or
-3. make it an optional backend with graceful fallback
-
-Do not accidentally build an application that works only because the development machine already has these tools installed.
-
-The packaging test must be performed in a clean environment.
-
----
-
-# 25. AppImage Release
-
-Produce a portable AppImage as the first release format if practical.
-
-Target:
-
-```text
-PDFShrink-1.0.0-x86_64.AppImage
-```
-
-Expected user workflow:
-
 ```bash
-chmod +x PDFShrink-1.0.0-x86_64.AppImage
-./PDFShrink-1.0.0-x86_64.AppImage
+pdf4sci-gui
 ```
 
-The AppImage must contain or correctly provide access to everything needed at runtime.
+Choose naming consistently with the existing CLI.
 
-It should not require Conda.
-
-It should not require the source repository.
-
-Test:
-
-- startup
-- drag and drop
-- analysis
-- compression
-- output creation
-- PDF opening
-- failure handling
-
-on a clean Ubuntu environment.
+The desktop application must also appear in the Ubuntu application launcher.
 
 ---
 
-# 26. Debian `.deb` Installer
+# 25. Desktop Integration
 
-After the standalone build is stable, produce:
-
-```text
-pdfshrink_1.0.0_amd64.deb
-```
-
-The package should install PDFShrink as a normal Ubuntu application.
-
-Expected installation:
-
-```bash
-sudo apt install ./pdfshrink_1.0.0_amd64.deb
-```
-
-It should install appropriate files under locations such as:
-
-```text
-/opt/pdfshrink/
-/usr/bin/pdfshrink-gui
-/usr/share/applications/pdfshrink.desktop
-/usr/share/icons/hicolor/.../apps/pdfshrink.png
-```
-
-Use appropriate Linux filesystem conventions rather than blindly copying these exact paths if a better packaging structure is warranted.
-
-After installation:
-
-- PDFShrink appears in Ubuntu Applications.
-- Clicking the icon launches the GUI.
-- No terminal window is required.
-- The application works without activating Conda.
-- Uninstallation removes installed application files cleanly.
-
----
-
-# 27. Desktop Integration
-
-Create a `.desktop` entry with appropriate final paths.
+Create a `.desktop` entry.
 
 Conceptually:
 
 ```ini
 [Desktop Entry]
-Name=PDFShrink
-Comment=Scientific PDF Optimizer
-Exec=pdfshrink-gui %f
-Icon=pdfshrink
+Name=pdf4sci
+Comment=Compress scientific PDF files
+Exec=pdf4sci-gui %f
+Icon=pdf4sci
 Terminal=false
 Type=Application
 Categories=Office;Utility;
 MimeType=application/pdf;
 ```
 
-Register PDF MIME support appropriately.
+Adjust `Exec` to the actual packaged executable.
 
-The intended result is:
+Install icons in appropriate Linux icon locations and sizes.
+
+The application should have:
+
+* launcher icon
+* window icon
+* taskbar/dock icon
+
+---
+
+# 26. Open With pdf4sci
+
+Where practical, support:
 
 ```text
-Right click paper.pdf
-    ↓
-Open With
-    ↓
-PDFShrink
+Right click PDF
+→ Open With
+→ pdf4sci
 ```
 
-Do not force PDFShrink to become the system default PDF viewer.
+The application should accept a PDF path passed through the `.desktop` entry.
+
+Do not make pdf4sci the default PDF application automatically.
 
 ---
 
-# 28. Application Icon and Metadata
+# 27. Application Identity
 
-Provide a proper application icon.
-
-Include standard Linux icon sizes where appropriate.
-
-Also provide:
-
-- application name: `PDFShrink`
-- short description: `Scientific PDF Optimizer`
-- version information
-- About dialog
-- license information if already defined by the repository
-
-Do not use third-party copyrighted branding.
-
----
-
-# 29. Clean-Machine Acceptance Test
-
-This is mandatory before considering packaging complete.
-
-Test the final release in a clean Ubuntu VM/container/environment that does **not** have the development Conda environment.
-
-Ideally the test environment should not already have the project's Python dependencies.
-
-For AppImage, verify:
+Use consistent naming:
 
 ```text
-Fresh Ubuntu
-    ↓
-Copy AppImage
-    ↓
-Make executable
-    ↓
-Launch
-    ↓
-Compress real scientific PDF
-    ↓
-Open output
+pdf4sci
 ```
 
-For `.deb`, verify:
+Provide application metadata including:
+
+* application name
+* version
+* description
+* icon
+* license information
+
+Do not display development/Conda terminology to end users.
+
+---
+
+# 28. Linux Compatibility
+
+Primary target:
 
 ```text
-Fresh Ubuntu
-    ↓
-Install .deb
-    ↓
-Launch from Applications
-    ↓
-Compress real scientific PDF
-    ↓
-Open output
-    ↓
-Uninstall package
+Ubuntu 22.04+
+x86_64
 ```
 
-Do not consider a package successful merely because it runs on the development machine.
+Also test on a newer Ubuntu release if practical.
+
+Be careful about:
+
+* glibc compatibility
+* Qt platform plugins
+* X11
+* Wayland
+* font rendering
+* Qt PDF dependencies
+* bundled shared libraries
+
+Prefer building on the oldest supported Ubuntu environment so the resulting binaries are not accidentally linked against a newer glibc than Ubuntu 22.04 provides.
+
+A container or clean VM may be used for reproducible release builds.
 
 ---
 
-# 30. Release Artifacts
+# 29. Clean-Machine Testing
 
-At the end of the packaging phase, produce a release directory similar to:
+This is critical.
+
+Do not validate releases only on the development machine.
+
+Test on a clean Ubuntu environment with:
+
+* no Conda
+* no project virtualenv
+* no repository checkout
+* no development Python packages
+* no accidentally inherited native dependencies
+
+Test both:
 
 ```text
-dist/
-├── PDFShrink-1.0.0-x86_64.AppImage
-├── pdfshrink_1.0.0_amd64.deb
-├── SHA256SUMS
-└── RELEASE_NOTES.md
+.AppImage
 ```
-
-Generate SHA-256 checksums for distributed binaries.
-
-Document:
-
-- supported Ubuntu versions
-- architecture
-- known limitations
-- external dependencies, if any
-
----
-
-# 31. Development Milestones
-
-Implement incrementally.
-
-## Milestone 1 — Integration audit
-
-- inspect existing backend/web project
-- run existing tests
-- identify reusable API
-- identify native dependencies
-- document GUI integration points
-
-Do not implement substantial UI until this is understood.
-
-## Milestone 2 — Minimal PySide6 application
-
-- application startup
-- main window
-- drag and drop
-- file picker
-- target size
-- presets
-- Compress button
-
-## Milestone 3 — Backend integration
-
-- connect GUI to existing core
-- background worker
-- progress
-- success/failure handling
-- output file
-
-At this point the application must already be usable.
-
-## Milestone 4 — Analysis and results
-
-- PDF analysis summary
-- detailed image table
-- compression summary
-- validation status
-- Open PDF
-- Open Folder
-
-## Milestone 5 — Preview
-
-- page renderer
-- navigation
-- zoom
-- fit page / fit width
-- thumbnails if practical
-
-## Milestone 6 — Before/after comparison
-
-- original/compressed toggle
-- synchronized page
-- synchronized zoom
-
-## Milestone 7 — UX polish
-
-- advanced settings
-- keyboard shortcuts
-- QSettings
-- dark/light compatibility
-- icon
-- error dialogs
-- logging
-
-## Milestone 8 — Standalone build
-
-- dependency audit
-- PyInstaller configuration
-- standalone application
-- test outside Conda
-
-## Milestone 9 — AppImage
-
-- AppImage packaging
-- clean Ubuntu test
-- portable release artifact
-
-## Milestone 10 — Debian package
-
-- `.deb`
-- `.desktop`
-- icon installation
-- MIME integration
-- clean install/uninstall test
-
-## Milestone 11 — Release validation
-
-- test real scientific PDFs
-- verify original files remain untouched
-- verify CLI still works
-- verify web app still works
-- verify GUI package on clean Ubuntu
-- generate checksums
-- write release notes
-
----
-
-# 32. Development Discipline
-
-At the end of every milestone:
-
-1. run existing backend tests
-2. run CLI tests
-3. run web tests
-4. run new relevant GUI tests
-5. manually launch the GUI where applicable
-6. test with at least one real scientific PDF
-7. verify the original PDF remains untouched
-8. document known limitations
-9. make a Git commit with a meaningful commit message
-
-Examples:
-
-```text
-feat(gui): add PySide6 application shell and PDF drop zone
-feat(gui): integrate compression worker and progress reporting
-feat(gui): add PDF analysis and compression results
-feat(gui): add PDF preview and zoom controls
-build(linux): add PyInstaller standalone bundle
-build(appimage): add portable Ubuntu release
-build(deb): add Ubuntu desktop installer
-```
-
-Do not combine the entire GUI and packaging implementation into one giant commit.
-
----
-
-# 33. Important Constraints
-
-Do **NOT**:
-
-- rewrite the working compression engine unnecessarily
-- duplicate compression algorithms inside the GUI
-- remove or break the existing web application
-- remove or break the existing CLI
-- rasterize PDFs for compression
-- run compression on the GUI thread
-- overwrite original PDFs by default
-- require Conda for end users
-- require users to manually install Python packages
-- use Electron merely to obtain a desktop window
-- hide backend errors during development
-- claim progress percentages that are not actually known
-- assume native binaries installed on the development machine will exist on user machines
-- declare packaging successful without clean-machine testing
-
-The existing backend is the source of truth for PDF processing.
-
-The GUI is a native presentation and interaction layer around that backend.
-
----
-
-# 34. Definition of Done
-
-The desktop project is considered complete when all of the following are true:
-
-1. I can launch PDFShrink as a native Ubuntu application.
-2. I can drag a scientific PDF into the window.
-3. I can specify a target such as `6 MB`.
-4. Compression runs without freezing the GUI.
-5. The original PDF is not overwritten.
-6. The result screen shows actual output size and validation status.
-7. I can open the output PDF or its containing folder.
-8. The existing CLI still works.
-9. The existing web application still works.
-10. An AppImage works on a clean supported Ubuntu installation without Conda.
-11. A `.deb` can be installed on a clean supported Ubuntu installation.
-12. The installed `.deb` appears in Ubuntu Applications.
-13. The installed application does not require the user to activate a Python environment.
-14. External native dependencies are either bundled, explicitly packaged, or handled gracefully.
-15. Release binaries and checksums are produced in `dist/`.
-
-The guiding principles are:
-
-> **Keep the compression engine stable. Make the desktop experience simple.**
 
 and:
 
-> **The development environment may use Conda; the released application must not depend on it.**
+```text
+.deb
+```
+
+At minimum test:
+
+1. application launches
+2. PDF opens
+3. drag-and-drop works
+4. PDF preview works
+5. page navigation works
+6. zoom works
+7. target size can be entered
+8. presets work
+9. advanced settings work
+10. compression runs
+11. GUI remains responsive
+12. progress works
+13. compressed PDF loads
+14. Original/Compressed toggle works
+15. output can be saved
+16. saved PDF opens normally
+17. loading another PDF resets state
+18. application exits cleanly
+
+Use at least one real scientific PDF containing:
+
+* text
+* equations
+* vector plots
+* raster figures
+* multiple pages
+
+---
+
+# 30. Regression Testing
+
+Packaging work must not break the existing project.
+
+After implementation run:
+
+* existing unit tests
+* compression tests
+* CLI tests
+* target-size tests
+* validation tests
+
+Then add GUI-focused tests where practical.
+
+Do not rewrite existing tests merely to make failures disappear.
+
+---
+
+# 31. Packaging Scripts
+
+Make release generation reproducible.
+
+Prefer scripts such as:
+
+```text
+scripts/
+    build_bundle.sh
+    build_appimage.sh
+    build_deb.sh
+    build_release.sh
+```
+
+or an equivalent clean structure.
+
+Ideally:
+
+```bash
+./scripts/build_release.sh
+```
+
+should generate the release artifacts.
+
+Avoid undocumented manual packaging steps.
+
+---
+
+# 32. Release Output
+
+Collect final artifacts in a clear directory such as:
+
+```text
+dist/release/
+```
+
+Expected output:
+
+```text
+pdf4sci-x86_64.AppImage
+pdf4sci_<version>_amd64.deb
+SHA256SUMS
+```
+
+Generate SHA-256 checksums.
+
+Do not include development environments or unnecessary intermediate build files in release artifacts.
+
+---
+
+# 33. Documentation
+
+Update the README with a concise installation section.
+
+Document:
+
+### AppImage
+
+```bash
+chmod +x pdf4sci-x86_64.AppImage
+./pdf4sci-x86_64.AppImage
+```
+
+### Debian/Ubuntu
+
+```bash
+sudo apt install ./pdf4sci_<version>_amd64.deb
+```
+
+Also document:
+
+* supported Ubuntu versions
+* how to launch
+* drag-and-drop/open-file behavior
+* where output is saved
+* known packaging limitations, if any
+
+Keep development instructions separate from end-user installation.
+
+---
+
+# 34. Do Not Overengineer
+
+Do not add:
+
+* automatic updater
+* user accounts
+* telemetry
+* cloud storage
+* plugin systems
+* database
+* online services
+* Electron
+* embedded web application
+* installer wizard
+* Windows packaging
+* macOS packaging
+
+Those are outside this task.
+
+Focus on a high-quality Ubuntu release.
+
+---
+
+# 35. Implementation Milestones
+
+Work incrementally.
+
+## Milestone 1 — Repository Audit
+
+Inspect:
+
+* backend
+* CLI
+* webapp
+* tests
+* dependencies
+* external executables
+
+Confirm existing behavior before modification.
+
+## Milestone 2 — Native GUI Skeleton
+
+Create PySide6 application with:
+
+* main window
+* sidebar
+* viewer area
+* file opening
+* drag/drop
+
+## Milestone 3 — PDF Viewer
+
+Implement:
+
+* PDF loading
+* rendering
+* page navigation
+* zoom
+* fit width/page
+
+## Milestone 4 — Compression Integration
+
+Connect GUI directly to existing core.
+
+Implement:
+
+* target size
+* presets
+* advanced settings
+* background worker
+
+## Milestone 5 — Results
+
+Implement:
+
+* progress
+* before/after size
+* validation
+* compressed preview
+* Original/Compressed toggle
+* save output
+
+## Milestone 6 — GUI Testing
+
+Test from source inside the development environment.
+
+Fix GUI lifecycle/thread/resource issues.
+
+## Milestone 7 — Standalone Bundle
+
+Create and test PyInstaller bundle.
+
+Do not continue until this runs independently from the source environment.
+
+## Milestone 8 — AppImage
+
+Build and test:
+
+```text
+pdf4sci-x86_64.AppImage
+```
+
+## Milestone 9 — Debian Package
+
+Build and test:
+
+```text
+pdf4sci_<version>_amd64.deb
+```
+
+## Milestone 10 — Clean Ubuntu Test
+
+Test both artifacts on a clean supported Ubuntu environment.
+
+## Milestone 11 — Release
+
+Generate:
+
+* AppImage
+* `.deb`
+* SHA256SUMS
+* release documentation
+
+---
+
+# 36. Definition of Done
+
+This task is complete only when all of the following are true:
+
+### GUI
+
+* pdf4sci launches as a native Qt application.
+* Left sidebar contains file information and all compression controls.
+* Right side contains a large integrated PDF viewer.
+* Drag-and-drop works.
+* File picker works.
+* PDF preview works.
+* Page navigation works.
+* Zoom works.
+* Compression runs outside the UI thread.
+* Progress/status is displayed.
+* Compressed PDF is previewed after completion.
+* Original/Compressed switching works.
+* Output can be saved safely.
+* Loading another PDF correctly resets application state.
+
+### Core
+
+* Existing compression behavior remains unchanged.
+* Existing CLI still works.
+* Existing tests pass.
+* GUI uses the existing compression core rather than duplicating it.
+
+### AppImage
+
+* A working `.AppImage` is produced.
+* It runs without Conda.
+* It runs without separately installed Python.
+* It has been tested outside the development environment.
+
+### Debian Package
+
+* A working `.deb` is produced.
+* It installs with `apt`.
+* pdf4sci appears in the Ubuntu application launcher.
+* Desktop icon works.
+* Application launches after installation.
+* File-path argument/open-with behavior works where implemented.
+
+### Release
+
+The final release directory contains at minimum:
+
+```text
+pdf4sci-x86_64.AppImage
+pdf4sci_<version>_amd64.deb
+SHA256SUMS
+```
+
+Provide a short final report containing:
+
+* files created
+* GUI architecture used
+* packaging approach
+* required/bundled native dependencies
+* tests performed
+* clean-machine test results
+* known limitations
+
+Do not claim packaging success unless the actual generated artifacts were launched and tested.
+
+---
+
+# Final Principle
+
+> **The existing compressor is the product core. The native GUI is only a clean interface to it.**
+
+and:
+
+> **The development environment may use Conda; the released application must not depend on Conda or a separately installed Python runtime.**
+
+Prioritize reliability, scientific-PDF quality preservation, and a simple Ubuntu desktop experience over adding new features.

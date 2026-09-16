@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw
 
-from pdfshrink.classifier import classify_image
+from pdf4sci.classifier import classify_image
 
 
 def test_tiny_image_is_icon():

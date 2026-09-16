@@ -1,4 +1,4 @@
-# pdfshrink
+# pdf4sci
 
 A PDF compressor for scientific papers that targets a **user-defined file
 size** while preserving text, embedded fonts, equations, vector graphics,
@@ -8,7 +8,7 @@ does not apply one global lossy preset to everything in the file.
 Generic tools (Ghostscript's `-dPDFSETTINGS`, most "compress PDF" web tools)
 either rasterize whole pages or apply the same JPEG quality to every image
 regardless of whether that image is a 6000×4000 photo displayed at 3 inches
-or a small icon that's already efficient. `pdfshrink` instead looks at each
+or a small icon that's already efficient. `pdf4sci` instead looks at each
 embedded raster image individually — its pixel dimensions, how large it's
 actually displayed on the page (its *effective DPI*), and its content type —
 and only touches images that are actually oversized for how they're used.
@@ -18,13 +18,13 @@ and only touches images that are actually oversized for how they're used.
 This project is being built in phases (see `instruction.md`). Currently
 implemented:
 
-- **Phase 1 — analyzer**: `pdfshrink <file> --analyze` reports, per image,
+- **Phase 1 — analyzer**: `pdf4sci <file> --analyze` reports, per image,
   its pixel dimensions, displayed size, effective DPI, embedded size,
   format, transparency, reuse across the document, and a keep/downsample
   recommendation. It also reports what fraction of the file's bytes are
   raster images vs. everything else (text, fonts, vector content,
   structure).
-- **Phase 2 — safe optimization**: `pdfshrink <file>` downsamples every
+- **Phase 2 — safe optimization**: `pdf4sci <file>` downsamples every
   image the analyzer flagged as exceeding `--max-dpi` and re-encodes it
   (lossless for anything with transparency or already lossless, JPEG for
   already-JPEG photos), leaving everything else in the PDF untouched. On
@@ -50,12 +50,12 @@ implemented:
   (each pass/fail), reported right after the size summary — pass
   `--no-validate` to skip it, or `--diagnostics` to also render each page
   and report PSNR/SSIM (informational only; this tool does not optimize
-  for them). `pdfshrink benchmark paper.pdf` runs all four presets and
+  for them). `pdf4sci benchmark paper.pdf` runs all four presets and
   prints a size/reduction table without permanently writing the
   intermediate PDFs (add `--output-dir` to keep them).
 
 All four backend phases from `instruction.md` are now implemented end to
-end. A web UI (`pdfshrink-web`) has also been added on top, per
+end. A web UI (`pdf4sci-web`) has also been added on top, per
 `WEBAPP_GUI_INSTRUCTION.md` — see below. (`GUI_INSTRUCTION.md`, a separate
 native-desktop/PySide6 spec, has not been started.)
 
@@ -68,8 +68,8 @@ works identically.
 
 ```bash
 # Using conda (recommended if python3-venv isn't installed / you can't sudo)
-conda create -n pdfshrink python=3.10 -y
-conda activate pdfshrink
+conda create -n pdf4sci python=3.10 -y
+conda activate pdf4sci
 
 # Or, if python3-venv is available:
 # python3 -m venv .venv && source .venv/bin/activate
@@ -95,41 +95,41 @@ on Ubuntu or installable via `sudo apt install ghostscript`.)
 ```bash
 # Analyze a PDF: report every raster image, its effective DPI, and whether
 # it's a compression candidate. Makes no changes to the file.
-pdfshrink paper.pdf --analyze
+pdf4sci paper.pdf --analyze
 
 # Compress: downsample oversized images, write paper_compressed.pdf.
 # The original is never overwritten unless -o points at it AND --overwrite
 # is also passed.
-pdfshrink paper.pdf
+pdf4sci paper.pdf
 
 # See exactly what would change, without writing anything.
-pdfshrink paper.pdf --dry-run --verbose
+pdf4sci paper.pdf --dry-run --verbose
 
 # Change the DPI threshold used for the keep/downsample decision
 # (default: 300, appropriate for print-quality scientific figures).
-pdfshrink paper.pdf --max-dpi 250
+pdf4sci paper.pdf --max-dpi 250
 
 # Custom output path, and the JPEG quality floor for photographic images.
-pdfshrink paper.pdf -o out.pdf --min-jpeg-quality 90
+pdf4sci paper.pdf -o out.pdf --min-jpeg-quality 90
 
 # Fit a size budget: tries settings gentlest-first, stops at the first
 # that fits. Warns (without crashing or destroying quality) if the ladder
 # is exhausted before reaching the target.
-pdfshrink paper.pdf --target-size 6MB
+pdf4sci paper.pdf --target-size 6MB
 
 # Presets bundle a --max-dpi/--min-jpeg-quality pair. Explicit flags
 # override whatever the preset sets.
-pdfshrink paper.pdf --preset aggressive
+pdf4sci paper.pdf --preset aggressive
 
 # Skip the post-compression validation checks (they run by default), or
 # add slower per-page PSNR/SSIM diagnostics on top of them.
-pdfshrink paper.pdf --no-validate
-pdfshrink paper.pdf --diagnostics
+pdf4sci paper.pdf --no-validate
+pdf4sci paper.pdf --diagnostics
 
 # Compare all four presets' size/reduction without keeping the outputs.
-pdfshrink benchmark paper.pdf
+pdf4sci benchmark paper.pdf
 # ...or keep them:
-pdfshrink benchmark paper.pdf --output-dir ./benchmark-out
+pdf4sci benchmark paper.pdf --output-dir ./benchmark-out
 ```
 
 Example output:
@@ -179,7 +179,7 @@ the same `analyzer`/`optimizer`/`quality`/`validation` functions the CLI
 uses — no subprocess, no separate compression logic.
 
 ```bash
-pdfshrink-web
+pdf4sci-web
 # then open http://127.0.0.1:5000
 ```
 
@@ -200,7 +200,7 @@ use on your own machine; it is not hardened for exposing to a network.
 ## Architecture
 
 ```text
-pdfshrink/
+pdf4sci/
     __init__.py
     cli.py        — Typer CLI, report formatting
     analyzer.py   — reads a PDF, computes per-image effective DPI and a
@@ -254,7 +254,7 @@ tests/
 
 The `benchmark` command lives in `cli.py` as a second Typer app; `entry()`
 dispatches to it or to the default compress command based on argv, so
-`pdfshrink paper.pdf` and `pdfshrink benchmark paper.pdf` both work
+`pdf4sci paper.pdf` and `pdf4sci benchmark paper.pdf` both work
 without one shadowing the other.
 
 ## Limitations (current phase)

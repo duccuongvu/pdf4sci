@@ -1,7 +1,7 @@
 import pymupdf
 
-from pdfshrink.analyzer import analyze_pdf
-from pdfshrink.config import AnalyzerConfig
+from pdf4sci.analyzer import analyze_pdf
+from pdf4sci.config import AnalyzerConfig
 
 
 def test_high_dpi_image_flagged_for_downsample(make_pdf, png_bytes):

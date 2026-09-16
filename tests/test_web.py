@@ -4,7 +4,7 @@ import json
 import pymupdf
 import pytest
 
-from pdfshrink.web.app import create_app
+from pdf4sci.web.app import create_app
 
 
 @pytest.fixture

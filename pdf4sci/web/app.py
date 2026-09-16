@@ -1,4 +1,4 @@
-"""Flask web app: a single-page UI over the pdfshrink backend.
+"""Flask web app: a single-page UI over the pdf4sci backend.
 
 Reuses analyzer.analyze_pdf / optimizer.optimize_pdf / quality.optimize_to_
 target_size / validation.validate directly -- the exact same functions the

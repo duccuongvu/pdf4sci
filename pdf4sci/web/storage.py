@@ -16,7 +16,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 
-_BASE_DIR = os.path.join(tempfile.gettempdir(), "pdfshrink-web")
+_BASE_DIR = os.path.join(tempfile.gettempdir(), "pdf4sci-web")
 os.makedirs(_BASE_DIR, exist_ok=True)
 
 

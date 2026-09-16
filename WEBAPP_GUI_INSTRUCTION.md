@@ -1,6 +1,6 @@
-# PDFShrink Web UI — Integrated PDF Viewer
+# pdf4sci Web UI — Integrated PDF Viewer
 
-The PDFShrink backend and current web application already work.
+The pdf4sci backend and current web application already work.
 
 For this task, **do not modify the compression engine**.
 
@@ -24,7 +24,7 @@ Use approximately:
 ```text
 ┌─────────────────────────┬────────────────────────────────────────────┐
 │                         │                                            │
-│ PDFShrink               │                                            │
+│ pdf4sci               │                                            │
 │ Scientific PDF Optimizer│                                            │
 │                         │                                            │
 │ File                    │                                            │
@@ -109,7 +109,7 @@ Before a PDF is loaded, the left sidebar should provide the upload/drop area.
 Example:
 
 ```text
-PDFShrink
+pdf4sci
 Scientific PDF Optimizer
 
 ┌───────────────────────┐
@@ -240,7 +240,7 @@ Viewer → compressed PDF
 
 Do not keep both PDFs visible simultaneously.
 
-The purpose of this iteration is simply to let the user inspect the document inside PDFShrink.
+The purpose of this iteration is simply to let the user inspect the document inside pdf4sci.
 
 ---
 
