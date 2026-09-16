@@ -24,9 +24,18 @@ implemented:
   recommendation. It also reports what fraction of the file's bytes are
   raster images vs. everything else (text, fonts, vector content,
   structure).
+- **Phase 2 — safe optimization**: `pdfshrink <file>` downsamples every
+  image the analyzer flagged as exceeding `--max-dpi` and re-encodes it
+  (lossless for anything with transparency or already lossless, JPEG for
+  already-JPEG photos), leaving everything else in the PDF untouched. On
+  the provided real-world test papers this gets 65–80% size reduction with
+  identical text extraction, page count, and page dimensions. An image is
+  only ever replaced if the re-encoded version is actually smaller; images
+  that can't be safely round-tripped (CMYK, color-key/stencil masks) are
+  left untouched and reported as skipped rather than risking corruption.
 
-Compression itself (actually rewriting the PDF) is not implemented yet —
-that's Phase 2 onward.
+Target-size search (`--target-size`), presets, and content-aware image
+classification are Phase 3.
 
 ## Installation (Ubuntu 22.04+)
 
@@ -66,9 +75,20 @@ on Ubuntu or installable via `sudo apt install ghostscript`.)
 # it's a compression candidate. Makes no changes to the file.
 pdfshrink paper.pdf --analyze
 
-# Change the DPI threshold used for the keep/downsample recommendation
+# Compress: downsample oversized images, write paper_compressed.pdf.
+# The original is never overwritten unless -o points at it AND --overwrite
+# is also passed.
+pdfshrink paper.pdf
+
+# See exactly what would change, without writing anything.
+pdfshrink paper.pdf --dry-run --verbose
+
+# Change the DPI threshold used for the keep/downsample decision
 # (default: 300, appropriate for print-quality scientific figures).
-pdfshrink paper.pdf --analyze --max-dpi 250
+pdfshrink paper.pdf --max-dpi 250
+
+# Custom output path, and the JPEG quality floor for photographic images.
+pdfshrink paper.pdf -o out.pdf --min-jpeg-quality 90
 ```
 
 Example output:
@@ -104,6 +124,11 @@ pdfshrink/
     cli.py        — Typer CLI, report formatting
     analyzer.py   — reads a PDF, computes per-image effective DPI and a
                     keep/downsample recommendation (no writes)
+    optimizer.py  — orchestrates replacing flagged images: plan a
+                    candidate re-encode, only commit it if smaller
+    images.py     — per-image codec mechanics: decode (incl. soft masks),
+                    resize, encode (JPEG / Flate with the PNG-predictor
+                    trick), and write the result into a pikepdf object
     config.py     — compression policy thresholds, kept separate from
                     the PDF-manipulation code
     pdf_utils.py  — stateless helpers: size formatting, colorspace/filter
@@ -112,17 +137,33 @@ pdfshrink/
 tests/
     conftest.py       — synthetic PDF builders (in-memory, via PyMuPDF)
     test_analyzer.py
+    test_optimizer.py
 ```
 
-Future phases add `optimizer.py` (image replacement / downsampling),
-`classifier.py` (photo vs. plot vs. icon heuristics), `quality.py`
-(target-size search), and `validation.py` (post-compression checks),
-without changing this layout.
+Future phases add `classifier.py` (photo vs. plot vs. icon heuristics),
+`quality.py` (target-size search), and `validation.py` (deeper
+post-compression checks, e.g. SSIM/PSNR diagnostics), without changing
+this layout.
 
 ## Limitations (current phase)
 
-- Analysis only — no PDF is written yet.
-- Effective DPI is computed from each image's axis-aligned placement
-  rectangle on the page; extreme rotations/skews are an approximation.
-- Image classification (photo vs. plot vs. icon) is not implemented yet;
-  the current recommendation is DPI-threshold-only.
+- No content-aware image classification yet (Phase 3); the
+  keep/downsample decision is DPI-threshold-only, and the re-encoding
+  choice is based on the image's original format (already-JPEG stays
+  JPEG, everything else stays lossless) rather than distinguishing photos
+  from plots by content.
+- No `--target-size` search yet (Phase 3) — `--max-dpi` is currently the
+  only lever on the amount of compression.
+- Effective DPI, and therefore the downsampling decision, is computed from
+  each image's axis-aligned placement rectangle on the page; extreme
+  rotations/skews are an approximation.
+- CMYK images and images using a color-key or stencil `/Mask` (as opposed
+  to a soft mask, `/SMask`, which is handled) are left untouched rather
+  than risk a color or transparency error — reported as "skipped".
+- Re-encoding drops any embedded ICC profile (images are decoded to
+  DeviceGray/DeviceRGB); for typical scientific-paper figures this has no
+  visible effect, but wide-gamut photographic color accuracy isn't
+  preserved.
+- Only one `--preset`-equivalent lever (`--max-dpi`) exists so far; the
+  `scientific`/`balanced`/`aggressive`/`maximum-quality` presets and the
+  `benchmark` command are Phase 3/4.
