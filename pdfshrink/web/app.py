@@ -36,6 +36,10 @@ def create_app() -> Flask:
             "index.html",
             presets=list(PRESETS.keys()),
             default_preset=DEFAULT_PRESET,
+            preset_values={
+                name: {"max_dpi": p.max_dpi, "jpeg_quality": p.jpeg_quality}
+                for name, p in PRESETS.items()
+            },
         )
 
     @app.post("/api/upload")

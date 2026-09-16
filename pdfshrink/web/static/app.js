@@ -52,6 +52,16 @@
   function hide(el) { el.hidden = true; }
   function show(el) { el.hidden = false; }
 
+  function applyPresetDefaults() {
+    const values = PRESET_VALUES[presetSelect.value];
+    if (!values) return;
+    maxDpiInput.value = values.max_dpi;
+    minJpegQualityInput.value = values.jpeg_quality;
+  }
+
+  presetSelect.addEventListener("change", applyPresetDefaults);
+  applyPresetDefaults();
+
   PdfViewer.setOnStateChange((state) => {
     pageNumInput.value = state.page;
     pageCountEl.textContent = state.numPages;

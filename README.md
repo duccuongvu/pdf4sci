@@ -295,7 +295,12 @@ without one shadowing the other.
   compressed files live under a per-job temp directory keyed by a random
   token and are not automatically cleaned up on a timer — fine for local,
   single-user use, not for a long-running public deployment.
-- The PDF viewer renders one page at a time (matching the sidebar spec's
-  paginated toolbar) rather than continuous scroll; very large pages at
-  high zoom are re-rendered to a single canvas sized for that zoom level,
-  not tiled, so extreme zoom on a very large page is the slow path.
+- The PDF viewer scrolls continuously through all pages (one canvas per
+  page, lazily rendered via IntersectionObserver as they near the
+  viewport) and zooms via the toolbar buttons or Ctrl+scroll/pinch;
+  canvases aren't tiled, so extreme zoom on a very large page re-renders
+  that whole page's canvas at the new resolution rather than only the
+  visible tile.
+- Fit-width/fit-page assume a roughly uniform page size across the
+  document (true for virtually all scientific papers) — they size against
+  the first page, not each page individually.

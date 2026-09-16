@@ -51,11 +51,11 @@
           <summary>Advanced</summary>
           <div class="field-row">
             <label for="max-dpi">Maximum image DPI</label>
-            <input type="number" id="max-dpi" min="50" step="10" placeholder="preset default">
+            <input type="number" id="max-dpi" min="50" step="10">
           </div>
           <div class="field-row">
             <label for="min-jpeg-quality">Minimum JPEG quality</label>
-            <input type="number" id="min-jpeg-quality" min="1" max="100" step="1" placeholder="preset default">
+            <input type="number" id="min-jpeg-quality" min="1" max="100" step="1">
           </div>
         </details>
 
@@ -106,7 +106,7 @@
       </div>
       <div id="viewer-container" class="viewer-container" hidden>
         <div class="viewer-canvas-wrap">
-          <canvas id="pdf-canvas"></canvas>
+          <div id="pdf-pages"></div>
         </div>
         <div class="viewer-toolbar">
           <button type="button" id="prev-page" class="icon-btn" aria-label="Previous page">‹</button>
@@ -126,6 +126,9 @@
     </main>
   </div>
 
+  <script>
+    const PRESET_VALUES = {{ preset_values | tojson }};
+  </script>
   <script src="{{ url_for('static', filename='pdfjs/pdf.min.js') }}"></script>
   <script src="{{ url_for('static', filename='pdf-viewer.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
