@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from ..assets import icon_path
 from .main_window import MainWindow
 
 
@@ -13,6 +15,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("pdf4sci")
     app.setOrganizationName("pdf4sci")
+    app.setWindowIcon(QIcon(icon_path(256)))
 
     initial_path = sys.argv[1] if len(sys.argv) > 1 else None
     window = MainWindow(initial_path=initial_path)

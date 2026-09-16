@@ -177,6 +177,16 @@ body {
 
 .app-header {
   margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .app-header h1 {
@@ -189,6 +199,15 @@ body {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.app-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
 }
 
 .drop-zone {

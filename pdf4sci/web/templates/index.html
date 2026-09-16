@@ -4,14 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>pdf4sci</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
       <header class="app-header">
-        <h1>pdf4sci</h1>
-        <p class="subtitle">Scientific PDF Optimizer</p>
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="app-logo">
+        <div>
+          <h1>pdf4sci</h1>
+          <p class="subtitle">Scientific PDF Optimizer</p>
+        </div>
       </header>
 
       <section id="drop-zone" class="drop-zone" tabindex="0">
@@ -100,6 +104,8 @@
       </div>
 
       <button id="load-another" type="button" class="secondary-btn load-another" hidden>Load another PDF</button>
+
+      <footer class="app-footer">© 2026 Duc Cuong Vu</footer>
     </aside>
 
     <main class="viewer-pane">

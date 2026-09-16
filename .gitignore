@@ -6,8 +6,17 @@ build/
 dist/
 .pytest_cache/
 
-# local test inputs / outputs (not part of the project source)
-*_compressed.pdf
-/pdf-test*.pdf
-/scratch/
+# local test inputs / outputs and any other PDFs dropped in the repo
+# root while developing -- never part of the project source
 *.pdf
+
+# raw/unprocessed design uploads -- the app only ships the generated
+# icons under pdf4sci/assets/icons/
+/images/
+
+# planning docs for this session's own instructions, not project source
+instruction.md
+WEBAPP_GUI_INSTRUCTION.md
+GUI_INSTRUCTION.md
+
+/scratch/

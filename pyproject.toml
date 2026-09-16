@@ -30,3 +30,4 @@ include = ["pdf4sci*"]
 
 [tool.setuptools.package-data]
 "pdf4sci.web" = ["templates/*.html", "static/*", "static/pdfjs/*"]
+"pdf4sci.assets" = ["icons/*.png"]

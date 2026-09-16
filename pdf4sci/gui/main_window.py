@@ -9,7 +9,7 @@ import shutil
 import tempfile
 
 from PySide6.QtCore import Qt, QThread
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..analyzer import analyze_pdf
+from ..assets import icon_path
 from ..config import DEFAULT_PRESET, PRESETS
 from ..pdf_utils import human_size
 from .pdf_view import PdfViewPanel
@@ -92,6 +93,7 @@ class MainWindow(QMainWindow):
     def __init__(self, initial_path: str | None = None):
         super().__init__()
         self.setWindowTitle("pdf4sci — Scientific PDF Optimizer")
+        self.setWindowIcon(QIcon(icon_path(256)))
         self.resize(1280, 850)
         self.setAcceptDrops(True)
 
@@ -132,12 +134,23 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
+        header_row = QHBoxLayout()
+        logo_label = QLabel()
+        logo_label.setPixmap(
+            QIcon(icon_path(64)).pixmap(36, 36)
+        )
+        header_text = QVBoxLayout()
+        header_text.setSpacing(0)
         header = QLabel("pdf4sci")
         header.setStyleSheet("font-size: 18px; font-weight: 700;")
         subtitle = QLabel("Scientific PDF Optimizer")
         subtitle.setStyleSheet("color: palette(placeholderText);")
-        layout.addWidget(header)
-        layout.addWidget(subtitle)
+        header_text.addWidget(header)
+        header_text.addWidget(subtitle)
+        header_row.addWidget(logo_label)
+        header_row.addLayout(header_text)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
 
         self.drop_area = DropArea(self.load_pdf)
         layout.addWidget(self.drop_area)
@@ -180,6 +193,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.load_another_btn)
 
         layout.addStretch(1)
+
+        footer = QLabel("© 2026 Duc Cuong Vu")
+        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer.setStyleSheet("color: palette(placeholderText); font-size: 10px; padding-top: 8px;")
+        layout.addWidget(footer)
+
         scroll.setWidget(content)
         return scroll
 
