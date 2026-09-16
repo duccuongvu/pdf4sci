@@ -5,7 +5,7 @@
   const fileInput = document.getElementById("file-input");
   const fileInfo = document.getElementById("file-info");
   const fileNameEl = document.getElementById("file-name");
-  const fileSizeEl = document.getElementById("file-size");
+  const fileMetaEl = document.getElementById("file-meta");
   const analysisSummary = document.getElementById("analysis-summary");
   const settingsForm = document.getElementById("settings-form");
   const compressBtn = document.getElementById("compress-btn");
@@ -27,21 +27,57 @@
   const validationList = document.getElementById("validation-list");
   const resultImages = document.getElementById("result-images");
   const downloadLink = document.getElementById("download-link");
-  const compressAnotherBtn = document.getElementById("compress-another");
+  const loadAnotherBtn = document.getElementById("load-another");
+  const toggleOriginalBtn = document.getElementById("toggle-original");
+  const toggleCompressedBtn = document.getElementById("toggle-compressed");
+
+  const viewerEmpty = document.getElementById("viewer-empty");
+  const viewerContainer = document.getElementById("viewer-container");
+  const prevPageBtn = document.getElementById("prev-page");
+  const nextPageBtn = document.getElementById("next-page");
+  const pageNumInput = document.getElementById("page-num");
+  const pageCountEl = document.getElementById("page-count");
+  const fitWidthBtn = document.getElementById("fit-width");
+  const fitPageBtn = document.getElementById("fit-page");
+  const zoomOutBtn = document.getElementById("zoom-out");
+  const zoomInBtn = document.getElementById("zoom-in");
+  const zoomLevelEl = document.getElementById("zoom-level");
 
   let currentToken = null;
+  let originalFile = null;
+  let originalUrl = null;
+  let compressedUrl = null;
+  let activeVariant = null; // "original" | "compressed"
 
   function hide(el) { el.hidden = true; }
   function show(el) { el.hidden = false; }
 
-  function resetForNewUpload() {
+  PdfViewer.setOnStateChange((state) => {
+    pageNumInput.value = state.page;
+    pageCountEl.textContent = state.numPages;
+    zoomLevelEl.textContent = Math.round(state.scale * 100) + "%";
+  });
+
+  function resetAll() {
+    PdfViewer.dispose();
+    if (originalUrl) URL.revokeObjectURL(originalUrl);
+    if (compressedUrl && compressedUrl !== originalUrl) URL.revokeObjectURL(compressedUrl);
+
+    currentToken = null;
+    originalFile = null;
+    originalUrl = null;
+    compressedUrl = null;
+    activeVariant = null;
+
     hide(resultEl);
     hide(errorBox);
     hide(statusEl);
     hide(analysisSummary);
     hide(settingsForm);
     hide(fileInfo);
-    currentToken = null;
+    hide(loadAnotherBtn);
+    hide(viewerContainer);
+    show(viewerEmpty);
     fileInput.value = "";
   }
 
@@ -93,13 +129,30 @@
     if (fileInput.files.length) handleFile(fileInput.files[0]);
   });
 
+  async function showInViewer(url, variant) {
+    show(viewerContainer);
+    hide(viewerEmpty);
+    const preserved = activeVariant ? PdfViewer.getState() : { page: 1, scale: 1.0, fitMode: "width" };
+    await PdfViewer.load(url, preserved);
+    activeVariant = variant;
+    updateToggleButtons();
+  }
+
+  function updateToggleButtons() {
+    toggleOriginalBtn.classList.toggle("active", activeVariant === "original");
+    toggleCompressedBtn.classList.toggle("active", activeVariant === "compressed");
+  }
+
   async function handleFile(file) {
-    resetForNewUpload();
+    resetAll();
 
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       showError("Please choose a PDF file.");
       return;
     }
+
+    originalFile = file;
+    originalUrl = URL.createObjectURL(file);
 
     statusText.textContent = "Reading " + file.name + "…";
     show(statusEl);
@@ -126,7 +179,7 @@
 
     currentToken = data.token;
     fileNameEl.textContent = data.filename;
-    fileSizeEl.textContent = data.size_human;
+    fileMetaEl.textContent = `${data.size_human} · ${data.pages} page${data.pages === 1 ? "" : "s"}`;
     show(fileInfo);
 
     const a = data.analysis;
@@ -138,6 +191,13 @@
     }
 
     show(settingsForm);
+    show(loadAnotherBtn);
+
+    try {
+      await showInViewer(originalUrl, "original");
+    } catch (err) {
+      showError("Could not render this PDF for preview, but compression can still proceed.");
+    }
   }
 
   settingsForm.addEventListener("submit", async (e) => {
@@ -181,13 +241,23 @@
       return;
     }
 
+    try {
+      const pdfResp = await fetch(data.download_url);
+      const blob = await pdfResp.blob();
+      compressedUrl = URL.createObjectURL(blob);
+    } catch (err) {
+      showError("Compression finished, but the result could not be loaded into the preview.");
+      return;
+    }
+
     renderResult(data);
+    await showInViewer(compressedUrl, "compressed");
   });
 
   function renderResult(data) {
     resultBefore.textContent = data.original_size_human;
     resultAfter.textContent = data.output_size_human;
-    resultReduction.textContent = `Reduction: ${data.reduction_pct}%`;
+    resultReduction.textContent = `${data.reduction_pct}% smaller`;
 
     if (data.warning) {
       resultWarning.textContent = data.warning;
@@ -222,7 +292,28 @@
     show(resultEl);
   }
 
-  compressAnotherBtn.addEventListener("click", () => {
-    resetForNewUpload();
+  toggleOriginalBtn.addEventListener("click", async () => {
+    if (!originalUrl || activeVariant === "original") return;
+    await showInViewer(originalUrl, "original");
   });
+
+  toggleCompressedBtn.addEventListener("click", async () => {
+    if (!compressedUrl || activeVariant === "compressed") return;
+    await showInViewer(compressedUrl, "compressed");
+  });
+
+  loadAnotherBtn.addEventListener("click", () => {
+    resetAll();
+  });
+
+  prevPageBtn.addEventListener("click", () => PdfViewer.prevPage());
+  nextPageBtn.addEventListener("click", () => PdfViewer.nextPage());
+  pageNumInput.addEventListener("change", () => {
+    const n = parseInt(pageNumInput.value, 10);
+    if (!Number.isNaN(n)) PdfViewer.goTo(n);
+  });
+  fitWidthBtn.addEventListener("click", () => PdfViewer.setFit("width"));
+  fitPageBtn.addEventListener("click", () => PdfViewer.setFit("page"));
+  zoomOutBtn.addEventListener("click", () => PdfViewer.zoomStep(-1));
+  zoomInBtn.addEventListener("click", () => PdfViewer.zoomStep(1));
 })();

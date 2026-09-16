@@ -171,9 +171,11 @@ Vector content untouched: PASS
 
 ## Web UI
 
-A single-page web interface: drop a PDF, optionally set a target size in
-MB or pick a preset, click Compress, download the result. It calls the
-same `analyzer`/`optimizer`/`quality`/`validation` functions the CLI
+A two-column web interface: a left sidebar with everything (file info,
+analysis, target size/preset, advanced settings, progress, results), and
+a right-hand pane dominated by an in-browser PDF viewer (PDF.js, vendored
+locally under `static/pdfjs/` — no CDN dependency at runtime). It calls
+the same `analyzer`/`optimizer`/`quality`/`validation` functions the CLI
 uses — no subprocess, no separate compression logic.
 
 ```bash
@@ -181,11 +183,16 @@ pdfshrink-web
 # then open http://127.0.0.1:5000
 ```
 
-The result screen shows before/after size, reduction %, the same
-pass/fail validation checklist as the CLI, and a download link. Advanced
-settings (max DPI, minimum JPEG quality) are tucked behind a disclosure
-triangle, matching the backend's own `--max-dpi`/`--min-jpeg-quality`
-flags — the web UI does not invent settings the CLI doesn't have.
+Workflow: drop a PDF and it renders immediately in the viewer (page
+navigation, zoom presets, fit-width/fit-page) → set a target size or
+preset → Compress → the viewer automatically switches to the compressed
+result, with a small Original/Compressed toggle in the sidebar that
+preserves the current page and zoom when you switch — so you can zoom
+into a figure and flip back and forth to check it stayed sharp. There is
+only one viewer instance; toggling swaps which PDF it's showing rather
+than maintaining two side-by-side panels. The result also shows
+before/after size, reduction %, and the same pass/fail validation
+checklist as the CLI.
 
 This runs Flask's built-in development server, which is fine for local
 use on your own machine; it is not hardened for exposing to a network.
@@ -220,7 +227,16 @@ pdfshrink/
         storage.py    — per-job temp-file handling, keyed by an opaque
                         uuid4 token (no path-traversal surface)
         templates/index.html
-        static/{style.css,app.js}
+        static/style.css
+        static/app.js        — sidebar workflow: upload, settings,
+                                compress, results, Original/Compressed
+                                toggle
+        static/pdf-viewer.js — thin wrapper around PDF.js: one canvas,
+                                page nav, zoom/fit; owns no object URLs
+                                (app.js keeps both Original and
+                                Compressed alive for instant toggling)
+        static/pdfjs/         — vendored PDF.js (pdf.min.js +
+                                pdf.worker.min.js), no CDN at runtime
 
 tests/
     conftest.py       — synthetic PDF builders (in-memory, via PyMuPDF)
@@ -279,3 +295,7 @@ without one shadowing the other.
   compressed files live under a per-job temp directory keyed by a random
   token and are not automatically cleaned up on a timer — fine for local,
   single-user use, not for a long-running public deployment.
+- The PDF viewer renders one page at a time (matching the sidebar spec's
+  paginated toolbar) rather than continuous scroll; very large pages at
+  high zoom are re-rendered to a single canvas sized for that zoom level,
+  not tiled, so extreme zoom on a very large page is the slow path.

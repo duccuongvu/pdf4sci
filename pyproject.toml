@@ -27,4 +27,4 @@ pdfshrink-web = "pdfshrink.web.app:main"
 include = ["pdfshrink*"]
 
 [tool.setuptools.package-data]
-"pdfshrink.web" = ["templates/*.html", "static/*"]
+"pdfshrink.web" = ["templates/*.html", "static/*", "static/pdfjs/*"]
