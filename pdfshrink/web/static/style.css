@@ -275,8 +275,7 @@ body {
   gap: 6px;
 }
 
-input[type="number"],
-select {
+input[type="number"] {
   padding: 7px 9px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -290,6 +289,43 @@ select {
 .unit {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* Custom flat arrow instead of the OS-native <select> chrome, so it
+   matches the rest of the app's controls instead of looking like a
+   different toolkit dropped it in. */
+.select-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 190px;
+}
+
+.select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  padding: 7px 30px 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
 }
 
 .advanced {
@@ -506,7 +542,8 @@ select {
   }
 
   input[type="number"],
-  select {
+  .select-wrap {
     width: 100%;
+    max-width: none;
   }
 }

@@ -40,11 +40,13 @@
 
         <div class="field-row">
           <label for="preset">Preset</label>
-          <select id="preset">
-            {% for p in presets %}
-            <option value="{{ p }}" {% if p == default_preset %}selected{% endif %}>{{ p }}</option>
-            {% endfor %}
-          </select>
+          <div class="select-wrap">
+            <select id="preset">
+              {% for p in presets %}
+              <option value="{{ p }}" {% if p == default_preset %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </div>
         </div>
 
         <details class="advanced">
