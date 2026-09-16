@@ -9,9 +9,10 @@ from itertools import groupby
 import typer
 
 from .analyzer import PDFAnalysis, analyze_pdf
-from .config import AnalyzerConfig
+from .config import PRESETS, AnalyzerConfig, DEFAULT_PRESET
 from .optimizer import OptimizationResult, optimize_pdf
-from .pdf_utils import human_size
+from .pdf_utils import human_size, parse_size
+from .quality import TargetSizeResult, optimize_to_target_size
 
 app = typer.Typer(add_completion=False, help="Target-size-aware PDF compressor for scientific papers.")
 
@@ -77,7 +78,7 @@ def _render_verbose_log(results: list[OptimizationResult]) -> str:
             bw, bh = r.before_dims
             aw, ah = r.after_dims
             lines.append(
-                f"[OPT ] p{r.page}/xref{r.xref} {bw}x{bh} -> {aw}x{ah}\n"
+                f"[OPT ] p{r.page}/xref{r.xref} {bw}x{bh} -> {aw}x{ah}  ({r.category})\n"
                 f"        {human_size(r.before_bytes)} -> {human_size(r.after_bytes)}"
             )
     return "\n".join(lines)
@@ -100,18 +101,62 @@ def _render_summary(results: list[OptimizationResult], before_size: int, after_s
     return "\n".join(lines)
 
 
+def _render_target_size_summary(result: TargetSizeResult) -> str:
+    lines = [
+        f"Original: {human_size(result.original_size)}",
+        f"Output:   {human_size(result.final_size)}",
+    ]
+    if result.original_size:
+        reduction = (1 - result.final_size / result.original_size) * 100
+        lines.append(f"Reduction: {reduction:.1f}%")
+    status = "reached" if result.achieved and not result.warning else "NOT reached"
+    lines.append(f"Target:   {human_size(result.target_size)} ({status})")
+    if result.steps_tried:
+        lines.append(
+            f"Settings used: max-dpi={result.max_dpi}, jpeg-quality={result.jpeg_quality} "
+            f"(search step {result.steps_tried})"
+        )
+    if result.results:
+        n_optimized = sum(1 for r in result.results if r.action == "optimized")
+        n_kept = sum(1 for r in result.results if r.action == "kept")
+        n_skipped = sum(1 for r in result.results if r.action == "skipped")
+        lines += [
+            "",
+            f"Raster images optimized: {n_optimized}",
+            f"Raster images preserved: {n_kept}",
+            f"Raster images skipped (unsafe to modify): {n_skipped}",
+        ]
+    if result.warning:
+        lines += ["", f"WARNING: {result.warning}"]
+    return "\n".join(lines)
+
+
 @app.command()
 def main(
     input_pdf: str = typer.Argument(..., help="Path to the input PDF."),
     output: str = typer.Option(None, "-o", "--output", help="Output PDF path. Default: <input>_compressed.pdf"),
     analyze: bool = typer.Option(False, "--analyze", help="Print an analysis report and exit."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change, without writing the output PDF."),
-    max_dpi: int = typer.Option(300, "--max-dpi", help="Images at or below this effective DPI are kept untouched."),
-    min_jpeg_quality: int = typer.Option(92, "--min-jpeg-quality", help="JPEG quality used when re-encoding photographic images."),
+    target_size: str = typer.Option(
+        None, "--target-size", help="Target output size, e.g. 6MB. Tries presets gentlest-first until one fits."
+    ),
+    preset: str = typer.Option(
+        DEFAULT_PRESET, "--preset", help=f"One of: {', '.join(PRESETS)}. Default: {DEFAULT_PRESET}."
+    ),
+    max_dpi: int = typer.Option(None, "--max-dpi", help="Override the preset's DPI threshold."),
+    min_jpeg_quality: int = typer.Option(
+        None, "--min-jpeg-quality", help="Override the preset's JPEG quality (also the floor for --target-size search)."
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Allow -o to point at the input file."),
     verbose: bool = typer.Option(False, "--verbose", help="Show detailed per-image decisions."),
 ) -> None:
-    config = AnalyzerConfig(max_dpi=max_dpi)
+    if preset not in PRESETS:
+        typer.echo(f"Unknown preset {preset!r}. Choose from: {', '.join(PRESETS)}.", err=True)
+        raise typer.Exit(code=1)
+    preset_cfg = PRESETS[preset]
+    effective_max_dpi = max_dpi if max_dpi is not None else preset_cfg.max_dpi
+    effective_jpeg_quality = min_jpeg_quality if min_jpeg_quality is not None else preset_cfg.jpeg_quality
+    config = AnalyzerConfig(max_dpi=effective_max_dpi)
 
     if analyze:
         analysis = analyze_pdf(input_pdf, config)
@@ -127,12 +172,29 @@ def main(
         )
         raise typer.Exit(code=1)
 
+    if target_size is not None:
+        target_bytes = parse_size(target_size)
+        with tempfile.TemporaryDirectory() as tmp:
+            write_path = os.path.join(tmp, "preview.pdf") if dry_run else output_path
+            result = optimize_to_target_size(
+                input_pdf, write_path, target_bytes, min_jpeg_quality=effective_jpeg_quality
+            )
+            if dry_run:
+                typer.echo("Planned changes (dry run, nothing written):\n")
+            if verbose:
+                typer.echo(_render_verbose_log(result.results))
+                typer.echo("")
+            typer.echo(_render_target_size_summary(result))
+        if not dry_run:
+            typer.echo(f"\nWrote {output_path}")
+        raise typer.Exit(code=0)
+
     analysis = analyze_pdf(input_pdf, config)
 
     if dry_run:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_out = os.path.join(tmp, "preview.pdf")
-            results = optimize_pdf(input_pdf, tmp_out, config, min_jpeg_quality, analysis=analysis)
+            results = optimize_pdf(input_pdf, tmp_out, config, effective_jpeg_quality, analysis=analysis)
             after_size = os.path.getsize(tmp_out)
         typer.echo("Planned changes (dry run, nothing written):\n")
         if verbose:
@@ -141,7 +203,7 @@ def main(
         typer.echo(_render_summary(results, analysis.file_size, after_size))
         raise typer.Exit(code=0)
 
-    results = optimize_pdf(input_pdf, output_path, config, min_jpeg_quality, analysis=analysis)
+    results = optimize_pdf(input_pdf, output_path, config, effective_jpeg_quality, analysis=analysis)
     after_size = os.path.getsize(output_path)
 
     if verbose:

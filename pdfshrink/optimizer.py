@@ -1,14 +1,14 @@
-"""Phase 2: rewrite oversized raster images in place.
+"""Rewrite oversized raster images in place.
 
 Downsamples each image the analyzer flagged to the configured max DPI and
 re-encodes it, leaving everything else in the PDF -- text, fonts, vector
 content, links/annotations, and images already within budget -- untouched.
 
-The encoding choice here is deliberately simple: images with transparency
-or that were already stored losslessly (FlateDecode) stay lossless;
-already-JPEG images are re-encoded as JPEG. Content-aware classification
-(so a lossless plot rendered without transparency isn't judged solely by
-its original encoding) is Phase 3's job -- see classifier.py.
+The encoding choice is: images with transparency always stay lossless
+(never convert a transparent image to JPEG); otherwise, classifier.py's
+content-based heuristic decides -- photographic/continuous-tone content
+gets JPEG, everything else (plots, diagrams, screenshots, icons) stays
+lossless, regardless of how the image happened to be encoded originally.
 
 Every candidate replacement is encoded and measured *before* it is written
 into the PDF; if downsampling plus re-encoding would not actually shrink
@@ -26,6 +26,7 @@ import pikepdf
 import pymupdf
 
 from .analyzer import PDFAnalysis, analyze_pdf
+from .classifier import classify_image
 from .config import AnalyzerConfig
 from .images import (
     apply_jpeg,
@@ -48,29 +49,33 @@ class OptimizationResult:
     after_bytes: int = 0
     before_dims: tuple[int, int] = (0, 0)
     after_dims: tuple[int, int] = (0, 0)
+    category: str = ""
 
 
 def _plan_replacement(decoded, scale: float, jpeg_quality: int):
     """Encode a candidate replacement without touching the PDF yet, so its
     size can be compared against the original before committing to it.
-    Returns (kind, payload, total_encoded_bytes, (width, height))."""
+    Returns (kind, payload, total_encoded_bytes, (width, height), category)."""
     resized = resize_by_scale(decoded.image, scale)
 
     if decoded.had_alpha:
+        # Never convert a transparent image to JPEG, regardless of content.
         rgba = resized.convert("RGBA")
         rgb_encoded = encode_lossless_for_pdf(rgba.convert("RGB"))
         alpha_encoded = encode_lossless_for_pdf(rgba.getchannel("A"))
         total = len(rgb_encoded["data"]) + len(alpha_encoded["data"])
-        return "alpha", (rgb_encoded, alpha_encoded), total, resized.size
+        return "alpha", (rgb_encoded, alpha_encoded), total, resized.size, "transparent"
 
-    if decoded.source_ext == "jpeg":
+    classification = classify_image(decoded.image, decoded.image.width, decoded.image.height)
+
+    if classification.prefer_jpeg:
         rgb = resized.convert("RGB")
         data = encode_jpeg(rgb, jpeg_quality)
-        return "jpeg", (data, rgb.size), len(data), resized.size
+        return "jpeg", (data, rgb.size), len(data), resized.size, classification.category
 
     normalized = resized if resized.mode == "L" else resized.convert("RGB")
     encoded = encode_lossless_for_pdf(normalized)
-    return "lossless", encoded, len(encoded["data"]), resized.size
+    return "lossless", encoded, len(encoded["data"]), resized.size, classification.category
 
 
 def _commit_replacement(pdf: pikepdf.Pdf, xref: int, kind: str, payload) -> None:
@@ -122,7 +127,9 @@ def optimize_pdf(
 
         scale = config.max_dpi / img.effective_dpi
         try:
-            kind, payload, after_total, new_dims = _plan_replacement(decoded, scale, jpeg_quality)
+            kind, payload, after_total, new_dims, category = _plan_replacement(
+                decoded, scale, jpeg_quality
+            )
         except Exception as exc:
             results.append(
                 OptimizationResult(
@@ -163,6 +170,7 @@ def optimize_pdf(
                 after_bytes=after_total,
                 before_dims=(img.width, img.height),
                 after_dims=new_dims,
+                category=category,
             )
         )
 

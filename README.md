@@ -33,9 +33,20 @@ implemented:
   only ever replaced if the re-encoded version is actually smaller; images
   that can't be safely round-tripped (CMYK, color-key/stencil masks) are
   left untouched and reported as skipped rather than risking corruption.
+- **Phase 3 — classification, target size, presets**: a cheap heuristic
+  classifier (entropy, color count, edge density, dimensions — no ML)
+  distinguishes photos from plots/diagrams/screenshots/icons and drives the
+  JPEG-vs-lossless choice by actual content instead of original format —
+  on the test papers this alone took reduction from ~66-81% to ~74-84% by
+  correctly routing genuine photos to JPEG. `--target-size` searches a
+  gentlest-first ladder of (DPI, JPEG quality) settings and stops at the
+  first one that actually fits the requested size, so a modest target
+  doesn't trigger maximum-aggressiveness compression. `--preset
+  {maximum-quality,scientific,balanced,aggressive}` selects a starting
+  point on that same ladder; `scientific` is the default.
 
-Target-size search (`--target-size`), presets, and content-aware image
-classification are Phase 3.
+The `benchmark` command and deeper post-compression validation (SSIM/PSNR
+diagnostics) are Phase 4.
 
 ## Installation (Ubuntu 22.04+)
 
@@ -89,6 +100,15 @@ pdfshrink paper.pdf --max-dpi 250
 
 # Custom output path, and the JPEG quality floor for photographic images.
 pdfshrink paper.pdf -o out.pdf --min-jpeg-quality 90
+
+# Fit a size budget: tries settings gentlest-first, stops at the first
+# that fits. Warns (without crashing or destroying quality) if the ladder
+# is exhausted before reaching the target.
+pdfshrink paper.pdf --target-size 6MB
+
+# Presets bundle a --max-dpi/--min-jpeg-quality pair. Explicit flags
+# override whatever the preset sets.
+pdfshrink paper.pdf --preset aggressive
 ```
 
 Example output:
@@ -129,31 +149,29 @@ pdfshrink/
     images.py     — per-image codec mechanics: decode (incl. soft masks),
                     resize, encode (JPEG / Flate with the PNG-predictor
                     trick), and write the result into a pikepdf object
-    config.py     — compression policy thresholds, kept separate from
-                    the PDF-manipulation code
+    classifier.py — cheap heuristic content classification (photo /
+                    screenshot / plot / icon), no ML
+    quality.py    — --target-size search: try (DPI, JPEG quality) rungs
+                    gentlest-first, stop at the first that fits
+    config.py     — compression policy thresholds and presets, kept
+                    separate from the PDF-manipulation code
     pdf_utils.py  — stateless helpers: size formatting, colorspace/filter
-                    name normalization
+                    name normalization, size string parsing
 
 tests/
     conftest.py       — synthetic PDF builders (in-memory, via PyMuPDF)
     test_analyzer.py
     test_optimizer.py
+    test_classifier.py
+    test_quality.py
 ```
 
-Future phases add `classifier.py` (photo vs. plot vs. icon heuristics),
-`quality.py` (target-size search), and `validation.py` (deeper
-post-compression checks, e.g. SSIM/PSNR diagnostics), without changing
-this layout.
+Phase 4 adds `validation.py` (deeper post-compression checks, e.g.
+SSIM/PSNR diagnostics) and a `benchmark` command, without changing this
+layout.
 
 ## Limitations (current phase)
 
-- No content-aware image classification yet (Phase 3); the
-  keep/downsample decision is DPI-threshold-only, and the re-encoding
-  choice is based on the image's original format (already-JPEG stays
-  JPEG, everything else stays lossless) rather than distinguishing photos
-  from plots by content.
-- No `--target-size` search yet (Phase 3) — `--max-dpi` is currently the
-  only lever on the amount of compression.
 - Effective DPI, and therefore the downsampling decision, is computed from
   each image's axis-aligned placement rectangle on the page; extreme
   rotations/skews are an approximation.
@@ -164,6 +182,14 @@ this layout.
   DeviceGray/DeviceRGB); for typical scientific-paper figures this has no
   visible effect, but wide-gamut photographic color accuracy isn't
   preserved.
-- Only one `--preset`-equivalent lever (`--max-dpi`) exists so far; the
-  `scientific`/`balanced`/`aggressive`/`maximum-quality` presets and the
-  `benchmark` command are Phase 3/4.
+- The photo/plot/screenshot/icon classifier is a heuristic (entropy, color
+  count, edge density, dimensions) calibrated against the project's real
+  test PDFs, not a learned model — it can misclassify unusual content
+  (e.g. a very low-contrast photo), in which case the fallback is the
+  lossless path, which never destroys quality, just doesn't compress as
+  hard as JPEG would have.
+- `--target-size` re-runs the full analyzer + optimizer per rung tried, so
+  it can take several times as long as a single-preset run on a
+  many-image PDF; it always uses the real output file size to decide
+  whether a rung fits, never an estimate.
+- No `benchmark` command or SSIM/PSNR diagnostics yet — Phase 4.
