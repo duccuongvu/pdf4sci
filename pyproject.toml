@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdfshrink"
+version = "0.1.0"
+description = "Target-size-aware PDF compressor optimized for scientific papers"
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.24",
+    "pikepdf>=8.0",
+    "Pillow>=9.0",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+pdfshrink = "pdfshrink.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["pdfshrink*"]

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# local test inputs / outputs (not part of the project source)
+*_compressed.pdf
+/pdf-test*.pdf
+/scratch/
