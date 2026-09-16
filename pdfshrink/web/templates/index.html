@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDFShrink</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1>PDFShrink</h1>
+      <p class="subtitle">Scientific PDF Optimizer</p>
+    </header>
+
+    <section id="drop-zone" class="drop-zone" tabindex="0">
+      <input type="file" id="file-input" accept="application/pdf" hidden>
+      <div class="drop-zone-content">
+        <p class="drop-zone-title">Drop PDF here</p>
+        <p class="drop-zone-sub">or click to browse</p>
+      </div>
+    </section>
+
+    <div id="file-info" class="file-info" hidden>
+      <span id="file-name" class="file-name"></span>
+      <span id="file-size" class="file-size"></span>
+    </div>
+
+    <div id="analysis-summary" class="analysis-summary" hidden></div>
+
+    <form id="settings-form" class="settings" hidden>
+      <div class="field-row">
+        <label for="target-size">Target size</label>
+        <div class="field-inline">
+          <input type="number" id="target-size" min="0" step="0.1" placeholder="optional">
+          <span class="unit">MB</span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label for="preset">Preset</label>
+        <select id="preset">
+          {% for p in presets %}
+          <option value="{{ p }}" {% if p == default_preset %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <div class="field-row">
+          <label for="max-dpi">Maximum image DPI</label>
+          <input type="number" id="max-dpi" min="50" step="10" placeholder="preset default">
+        </div>
+        <div class="field-row">
+          <label for="min-jpeg-quality">Minimum JPEG quality</label>
+          <input type="number" id="min-jpeg-quality" min="1" max="100" step="1" placeholder="preset default">
+        </div>
+      </details>
+
+      <button type="submit" id="compress-btn" class="primary-btn">Compress</button>
+    </form>
+
+    <div id="status" class="status" hidden>
+      <div class="spinner"></div>
+      <span id="status-text">Compressing…</span>
+    </div>
+
+    <div id="error-box" class="error-box" hidden>
+      <p id="error-message"></p>
+      <button id="error-details-toggle" type="button" class="link-btn" hidden>Show details</button>
+      <pre id="error-details" hidden></pre>
+    </div>
+
+    <div id="result" class="result" hidden>
+      <p class="result-sizes">
+        <span id="result-before"></span> → <span id="result-after"></span>
+      </p>
+      <p class="result-reduction" id="result-reduction"></p>
+      <p id="result-warning" class="result-warning" hidden></p>
+
+      <ul id="validation-list" class="validation-list"></ul>
+
+      <p id="result-images" class="result-images"></p>
+
+      <div class="result-actions">
+        <a id="download-link" class="primary-btn" href="#" download>Download compressed PDF</a>
+        <button id="compress-another" type="button" class="secondary-btn">Compress another</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

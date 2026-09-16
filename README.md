@@ -54,7 +54,10 @@ implemented:
   prints a size/reduction table without permanently writing the
   intermediate PDFs (add `--output-dir` to keep them).
 
-All four phases from the spec are now implemented end to end.
+All four backend phases from `instruction.md` are now implemented end to
+end. A web UI (`pdfshrink-web`) has also been added on top, per
+`WEBAPP_GUI_INSTRUCTION.md` — see below. (`GUI_INSTRUCTION.md`, a separate
+native-desktop/PySide6 spec, has not been started.)
 
 ## Installation (Ubuntu 22.04+)
 
@@ -71,7 +74,7 @@ conda activate pdfshrink
 # Or, if python3-venv is available:
 # python3 -m venv .venv && source .venv/bin/activate
 
-pip install -e ".[dev]"
+pip install -e ".[dev]"   # installs Flask too, for the web UI and its tests
 ```
 
 ### Optional native backends
@@ -166,6 +169,27 @@ Transparency preserved: PASS
 Vector content untouched: PASS
 ```
 
+## Web UI
+
+A single-page web interface: drop a PDF, optionally set a target size in
+MB or pick a preset, click Compress, download the result. It calls the
+same `analyzer`/`optimizer`/`quality`/`validation` functions the CLI
+uses — no subprocess, no separate compression logic.
+
+```bash
+pdfshrink-web
+# then open http://127.0.0.1:5000
+```
+
+The result screen shows before/after size, reduction %, the same
+pass/fail validation checklist as the CLI, and a download link. Advanced
+settings (max DPI, minimum JPEG quality) are tucked behind a disclosure
+triangle, matching the backend's own `--max-dpi`/`--min-jpeg-quality`
+flags — the web UI does not invent settings the CLI doesn't have.
+
+This runs Flask's built-in development server, which is fine for local
+use on your own machine; it is not hardened for exposing to a network.
+
 ## Architecture
 
 ```text
@@ -190,6 +214,14 @@ pdfshrink/
     pdf_utils.py  — stateless helpers: size formatting, colorspace/filter
                     name normalization, size string parsing
 
+    web/
+        app.py        — Flask routes: upload / compress / download,
+                        calling the backend functions above directly
+        storage.py    — per-job temp-file handling, keyed by an opaque
+                        uuid4 token (no path-traversal surface)
+        templates/index.html
+        static/{style.css,app.js}
+
 tests/
     conftest.py       — synthetic PDF builders (in-memory, via PyMuPDF)
     test_analyzer.py
@@ -200,6 +232,8 @@ tests/
     test_integration.py — one PDF combining vector graphics, text, a
                            photo, transparency, a repeated image, a
                            grayscale image, and a rotated/scaled image
+    test_web.py          — Flask test-client coverage of upload/compress/
+                            download and their error paths
 ```
 
 The `benchmark` command lives in `cli.py` as a second Typer app; `entry()`
@@ -238,3 +272,10 @@ without one shadowing the other.
 - Validation's "vector content untouched" check compares the count of
   vector drawing paths per page; it would catch a page being rasterized
   wholesale, but wouldn't catch a single path being subtly altered.
+- The web UI runs compression synchronously in the request handler (a
+  single scientific paper takes seconds to tens of seconds); there's no
+  granular progress bar, just a status spinner, and only one job runs at
+  a time in Flask's default dev-server threading model. Uploaded and
+  compressed files live under a per-job temp directory keyed by a random
+  token and are not automatically cleaned up on a timer — fine for local,
+  single-user use, not for a long-running public deployment.

@@ -10,3 +10,4 @@ dist/
 *_compressed.pdf
 /pdf-test*.pdf
 /scratch/
+*.pdf
