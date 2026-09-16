@@ -65,7 +65,14 @@ def optimize_to_target_size(
     output_path: str,
     target_bytes: int,
     min_jpeg_quality: int = 75,
+    on_step=None,
+    on_progress=None,
 ) -> TargetSizeResult:
+    """`on_step`, if given, is called as `on_step(step_index, total_steps,
+    max_dpi, jpeg_quality)` before each search rung runs; `on_progress` is
+    passed straight through to `optimize_pdf` for per-image progress within
+    that rung. Both are for reporting real progress (e.g. a GUI), never
+    required."""
     original_size = os.path.getsize(input_path)
 
     if target_bytes >= original_size:
@@ -82,11 +89,16 @@ def optimize_to_target_size(
             warning="Input already fits the requested target size; left unmodified.",
         )
 
+    steps = _ladder(min_jpeg_quality)
     last: TargetSizeResult | None = None
-    for step_index, (dpi, quality) in enumerate(_ladder(min_jpeg_quality), start=1):
+    for step_index, (dpi, quality) in enumerate(steps, start=1):
+        if on_step is not None:
+            on_step(step_index, len(steps), dpi, quality)
         config = AnalyzerConfig(max_dpi=dpi)
         analysis = analyze_pdf(input_path, config)
-        results = optimize_pdf(input_path, output_path, config, jpeg_quality=quality, analysis=analysis)
+        results = optimize_pdf(
+            input_path, output_path, config, jpeg_quality=quality, analysis=analysis, on_progress=on_progress
+        )
         size = os.path.getsize(output_path)
         last = TargetSizeResult(
             achieved=size <= target_bytes,

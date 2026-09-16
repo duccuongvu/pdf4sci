@@ -197,6 +197,41 @@ checklist as the CLI.
 This runs Flask's built-in development server, which is fine for local
 use on your own machine; it is not hardened for exposing to a network.
 
+## Native desktop GUI
+
+A PySide6/Qt 6 desktop application with the same left-sidebar-plus-viewer
+layout and workflow as the web UI, calling the same backend functions
+directly (no subprocess, no web server involved):
+
+```bash
+pip install -e ".[gui]"   # adds PySide6
+pdf4sci-gui               # or: pdf4sci-gui paper.pdf
+```
+
+The PDF viewer is Qt's own `QPdfDocument`/`QPdfView` (continuous
+multi-page scroll is built in) rather than a second PDF-rendering stack;
+compression always runs on a background `QThread` via a `CompressWorker`,
+so the window stays responsive and the same PDF stays visible and
+scrollable while a paper is being compressed. Progress messages
+("Optimizing image 7 / 11…") come from a real callback the optimizer now
+exposes (`on_progress`, optional and backward-compatible — the CLI and
+web UI don't pass it and are unaffected); when no percentage can be
+computed the progress bar is indeterminate rather than showing a made-up
+number. Errors surface as a native `QMessageBox` with a collapsed "Show
+Details" section for the traceback, never a bare stack trace in the
+main window.
+
+## Linux packaging (AppImage / .deb)
+
+Not yet built. Planned next, per `GUI_INSTRUCTION.md`: a PyInstaller
+bundle first (tested standalone, outside the conda dev environment),
+then an AppImage and a `.deb` built from it. This development
+environment has no Docker/VM available, so genuine clean-machine testing
+(a fresh Ubuntu install with no conda, no dev packages) will be
+best-effort — run with a sanitized `PATH`/env here, documented as a real
+limitation rather than glossed over — see `GUI_INSTRUCTION.md` for the
+full acceptance checklist that a true clean-machine test would need.
+
 ## Architecture
 
 ```text
@@ -238,6 +273,16 @@ pdf4sci/
         static/pdfjs/         — vendored PDF.js (pdf.min.js +
                                 pdf.worker.min.js), no CDN at runtime
 
+    gui/
+        app.py         — entry point: `pdf4sci-gui [file.pdf]`
+        main_window.py — sidebar + viewer layout, wires settings/results/
+                        toggle to the worker and PdfViewPanel
+        pdf_view.py    — QPdfDocument/QPdfView wrapper: page nav, fit
+                        width/page, zoom presets, Ctrl+wheel/pinch zoom
+        worker.py      — CompressWorker (runs on a QThread) calling
+                        optimizer/quality with their progress callbacks
+                        wired to Qt signals
+
 tests/
     conftest.py       — synthetic PDF builders (in-memory, via PyMuPDF)
     test_analyzer.py
@@ -245,6 +290,9 @@ tests/
     test_classifier.py
     test_quality.py
     test_validation.py
+    test_gui.py          — main window state/lifecycle and worker signals,
+                            run against the offscreen Qt platform (skipped
+                            if PySide6 isn't installed)
     test_integration.py — one PDF combining vector graphics, text, a
                            photo, transparency, a repeated image, a
                            grayscale image, and a rotated/scaled image

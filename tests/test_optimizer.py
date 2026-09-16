@@ -118,6 +118,23 @@ def test_vector_content_and_page_count_survive(make_pdf, png_bytes, tmp_path):
     new.close()
 
 
+def test_progress_callback_reports_each_image(make_pdf, png_bytes, tmp_path):
+    def build(doc):
+        for _ in range(3):
+            page = doc.new_page()
+            page.insert_image(pymupdf.Rect(0, 0, 72, 72), stream=png_bytes(3000, 3000))
+
+    path = make_pdf("multi.pdf", build)
+    out = str(tmp_path / "out.pdf")
+
+    calls = []
+    optimize_pdf(
+        path, out, AnalyzerConfig(max_dpi=300), on_progress=lambda done, total, img: calls.append((done, total))
+    )
+
+    assert calls == [(0, 3), (1, 3), (2, 3)]
+
+
 def test_cmyk_image_is_skipped_not_corrupted(make_pdf, tmp_path):
     import io
 

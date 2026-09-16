@@ -96,18 +96,27 @@ def optimize_pdf(
     config: AnalyzerConfig | None = None,
     jpeg_quality: int = 92,
     analysis: PDFAnalysis | None = None,
+    on_progress=None,
 ) -> list[OptimizationResult]:
     """Downsample every image `analyze_pdf` flagged as oversized and write
     the result to `output_path`. Returns a per-image list of what happened,
-    in the same order as the analysis."""
+    in the same order as the analysis.
+
+    `on_progress`, if given, is called as `on_progress(done, total, image)`
+    before each image is considered (`image` is the analyzer's ImageInfo) --
+    real progress for a caller that wants to report it (e.g. a GUI), never
+    required and never a stand-in for a fake percentage."""
     config = config or AnalyzerConfig()
     analysis = analysis or analyze_pdf(input_path, config)
 
     mudoc = pymupdf.open(input_path)
     pdf = pikepdf.open(input_path)
 
+    total = len(analysis.images)
     results: list[OptimizationResult] = []
-    for img in analysis.images:
+    for done, img in enumerate(analysis.images):
+        if on_progress is not None:
+            on_progress(done, total, img)
         if img.recommendation != "downsample":
             results.append(
                 OptimizationResult(img.xref, img.page, "kept", img.reason, img.compressed_size)
